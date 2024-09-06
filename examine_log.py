@@ -1,20 +1,21 @@
 from pathlib import Path
 import numpy as np
 import pandas as pd
-
-def read_log():
+import matplotlib.pyplot as plt
+def read_log(log_folder: str|Path):
+    
+    log_folder = Path(log_folder) if isinstance(log_folder, str) else log_folder
+    assert isinstance(log_folder, Path), f'Expected log_folser str or Path. Got {type(log_folder)}'
+    assert log_folder.exists(), f'log folder {log_folder.as_posix()} does not exist'
+    assert log_folder.is_dir(), f'{log_folder} is not a directory'
     
     dfs=[]
-    i=0
+    i=0 
     
-    for dataset in ['CIFAR10']:
+    for dataset in ['CIFAR10', 'SVHN']:
         for method in ['base', 'ours']:
             
             print(dataset, method)
-                
-            log_folder = Path('logs')
-            assert log_folder.exists(), f'log folder {log_folder.as_posix()} does not exist'
-            assert log_folder.is_dir(), f'{log_folder} is not a directory'
             
             log_file_path = log_folder / f'{dataset}_{method}.txt'
             assert log_file_path.exists(), f'{log_file_path} does not exist'
@@ -42,37 +43,26 @@ def read_log():
             
             arr = np.array(lnumbers)
             
+            plt.plot(arr, label=f'{dataset}_{method}');
+            
             df = pd.DataFrame({'dataset':dataset,
                                'method':method, 
                                'mean':np.mean(arr), 
                                'std':np.std(arr),
                                'median':np.median(arr),
                                'max':np.max(arr), 
+                               'best_iteration':np.argmax(arr),
                                'min':np.min(arr)}, index=[i])
             i+=1
 
             dfs.append(df)
-            # print(np.mean(arr), np.std(arr), np.median(arr), np.max(arr), np.min(arr))
     
     df=pd.concat(dfs, ignore_index=True)
     print(df)
-    
-    
-    # for l in lines:
-    #     print('*****')
-    #     print(l)
-    #     print('$$$$$')
-        
-    # arr = np.array(lines[1]).astype('float')
-    
-    # print(arr.shape)
-
+    plt.title(f'{log_folder.stem}');
+    plt.legend();
+    plt.savefig(f'plots/{log_folder.stem}.png') 
 
 if __name__ == '__main__':
-    dataset = 'CIFAR10'
-    assert dataset in ['CIFAR10', 'SHVN', 'MNIST'], f'dataset {dataset} not recognized'
-    method = 'base'
-    assert method in ['base', 'ours'], f'method {method} unrecognized'
-    
-    # read_log(dataset, method)
-    read_log()
+
+    read_log(log_folder='logs/baseline')
