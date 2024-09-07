@@ -3,12 +3,12 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description="")
 
-    parser.add_argument('--num_clients', type=int, default=10, help="Number of clients")
-    parser.add_argument('--local_epoch', type=int, default=2, help="Number of local epochs")
-    parser.add_argument('--global_epoch', type=int, default=15, help="Number of global epochs")
-    parser.add_argument('--batch_size', type=int, default=16, help="Batch size")
+    parser.add_argument('--num_clients', type=int, default=500, help="Number of clients")
+    parser.add_argument('--local_epoch', type=int, default=4, help="Number of local epochs")
+    parser.add_argument('--global_epoch', type=int, default=40, help="Number of global epochs")
+    parser.add_argument('--batch_size', type=int, default=64, help="Batch size")
 
-    parser.add_argument('--user_sample_rate', type=float, default=1, help="Sample rate for user sampling")
+    parser.add_argument('--user_sample_rate', type=float, default=0.1, help="Sample rate for user sampling")
 
     parser.add_argument('--target_epsilon', type=float, default=1, help="Target privacy budget epsilon")
     parser.add_argument('--target_delta', type=float, default=1e-1, help="Target privacy budget delta")
@@ -25,7 +25,7 @@ def parse_args():
     parser.add_argument('--no_clip', action='store_true')
     parser.add_argument('--no_noise', action='store_true')
 
-    parser.add_argument('--dataset', type=str, default='SVHN')
+    parser.add_argument('--dataset', type=str, default='CIFAR10')
 
     parser.add_argument('--dir_alpha', type=float, default=100)
 

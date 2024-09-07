@@ -5,7 +5,6 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 from opacus import PrivacyEngine
-from gep_utils import compute_subspace, embed_grad, flatten_tensor, project_back_embedding
 from options import parse_args
 from data import *
 from net import *
@@ -18,14 +17,17 @@ import random
 from torch.optim import Optimizer
 import datetime
 
+# >>>  ***GEP
+from gep_utils import compute_subspace, embed_grad, flatten_tensor, project_back_embedding
+# <<< ***GEP
 
 
 
 args = parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
 num_clients = args.num_clients
-num_public_clients = int(0.02 * num_clients)  # ***GEP 
-num_basis_elements = num_public_clients       # ***GEP
+num_public_clients = int(0.1 * num_clients)              # ***GEP 
+num_basis_elements = int(0.5 * num_public_clients)       # ***GEP
 local_epoch = args.local_epoch
 global_epoch = args.global_epoch
 batch_size = args.batch_size
@@ -261,7 +263,7 @@ def main():
         ]
         
         # >>> ***GEP embed clients updates in subspace spanned by public clients
-        embedded_clients_model_updates = [[] * len(sampled_client_indices)]
+        embedded_clients_model_updates = [[] for _ in range(len(sampled_client_indices))]
         for i, p in enumerate(global_model.parameters()):
             layer_updates = [client_update[i] for client_update in clients_model_updates]
             flattened_layer_update = flatten_tensor(layer_updates)
@@ -288,13 +290,14 @@ def main():
             noisy_update = [clipped_param + noise_param for clipped_param, noise_param in zip(clipped_update, noise)]
             noisy_updates.append(noisy_update)
             
-        # ***GEP project back the noisy embeddings
-        # for i, p in enumerate(global_model.parameters()):
+        # >>>> ***GEP project back the noisy embeddings
             
         noisy_updates = [[project_back_embedding(layer_update, pca, device).reshape(param.shape) 
                           for (layer_update, pca, param) in zip(client_update, pca_per_layer, global_model.parameters())]
                          for client_update in noisy_updates]   # ***GEP
         
+        # <<<< ***GEP
+
         aggregated_update = [
             torch.sum(
                 torch.stack(
