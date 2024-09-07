@@ -30,5 +30,5 @@ python ours.py --dataset SVHN --num_clients 500 --user_sample_rate 0.02 --global
 echo "SVHN ours ended pushing results"
 git add logs/SVHN_ours.txt
 CURRENT_TIME=$(date +"%Y-%m-%d %H:%M:%S")
-git commit -m "CIFAR10_ours results $CURRENT_TIME"
+git commit -m "SVHN_ours results $CURRENT_TIME"
 bash push.sh
