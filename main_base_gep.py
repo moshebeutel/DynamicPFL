@@ -138,6 +138,7 @@ def main():
     noise_multiplier = 0
     if not args.no_noise:
         noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size, client_data_sizes)
+        #noise_multiplier = 3.029
     print('noise multiplier', noise_multiplier)
         
         
