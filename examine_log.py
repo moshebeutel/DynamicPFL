@@ -12,66 +12,73 @@ def read_log(log_folder: str|Path):
     dfs=[]
     i=0 
     
-    opt = 'clients_100_rate_0.1_epochs_20'
-    
-    for dataset in ['CIFAR10']:
-        for method in ['base', 'base_gep','ours', 'ours_gep']:
-            for pub in ['', '_3_public', '_5_public' , '_10_public', '_10_public_5_basis']:
+    for log_file_path in log_folder.iterdir():
+        print(log_file_path.stem)
+        # log_file_path = log_folder / f'{dataset}_{method}_{suffix}.txt'
+        if not log_file_path.exists():
+            print(f'{log_file_path} does not exist')
+            continue
+        lines = []
+        record=False
+        with open(log_file_path, 'r') as f:
+            # l=1
+            # num_lines = 0
+            l = f.readline()
+            # ss = l.split('mean accuracy : ')
+            while l:
+                l = f.readline()
+                print(l)
+                # num_lines += 1
+                if l.startswith('mean accur'):
+                    record=True
+                elif l.startswith('acc matrix'):
+                    record=False
                 
-                suffix = f'{opt}{pub}'
-            
-                print(dataset, method, suffix)
-                
-                log_file_path = log_folder / f'{dataset}_{method}_{suffix}.txt'
-                if not log_file_path.exists():
-                    print(f'{log_file_path} does not exist')
-                    continue
-                lines = []
-                record=False
-                with open(log_file_path, 'r') as f:
-                    l=1
-                    while l:
-                        l = f.readline()
-                        if l.startswith('mean accur'):
-                            record=True
-                        elif l.startswith('acc matrix'):
-                            record=False
-                        
-                        if record:
-                            lines.append(l)
-                
-                numbers = lines[1].split(', ')
-                
-                lnumbers = []
-                for n in numbers:
-                    n=n.replace(']\n', '')
-                    n=n.replace('[', '')
-                    lnumbers.append(float(n))
-                
-                arr = np.array(lnumbers)
-                
-                plt.plot(arr, label=f'{dataset}_{method}_{suffix}');
-                
-                df = pd.DataFrame({'dataset':dataset,
-                                'method':method, 
-                                'mean':np.mean(arr), 
-                                'std':np.std(arr),
-                                'median':np.median(arr),
-                                'max':np.max(arr), 
-                                'best_iteration':np.argmax(arr),
-                                'min':np.min(arr)}, index=[i])
-                i+=1
+                if record:
+                    lines.append(l)
+        # print(f'{log_file_path} num lines {num_lines}') 
+        # l=f.readline()
+        # lines.append(l)
+        # if not lines:
+        #     continue
+        
+        numbers = lines[1].split(', ')
+        # numbers = l.split(', ')
+        
+        lnumbers = []
+        for n in numbers:
+            n=n.replace('\n', '')
+            n=n.replace(']', '')
+            n=n.replace('[', '')
+            lnumbers.append(float(n))
+        
+        arr = np.array(lnumbers)
+        
+        
+        plt.plot(arr, label=log_file_path.stem);
+        
+        df = pd.DataFrame({'dataset':"CIFAR10",
+                        'method':log_file_path.stem, 
+                        'mean':np.mean(arr), 
+                        'std':np.std(arr),
+                        'median':np.median(arr),
+                        'max':np.max(arr), 
+                        'best_iteration':np.argmax(arr),
+                        'min':np.min(arr)}, index=[i])
+        i+=1
 
-                dfs.append(df)
+        dfs.append(df)
     
     df=pd.concat(dfs, ignore_index=True)
     print(df)
     plt.title(f'{log_folder.stem}');
     plt.legend();
-    plt.savefig(f'plots/{log_folder.stem}.png') 
+    plt.savefig(f'plots/chalsssls3333333333fvmsdlkvfmv.png') 
+    # plt.show()
 
 if __name__ == '__main__':
 
     # read_log(log_folder='logs/basline')
     # read_log(log_folder='logs/ours_gep_first')
-    read_log(log_folder='logs/gep_all_2_epochs')
+    # read_log(log_folder='logs/CIFAR10_10_public_10_epochs_1_eps_0.02_sample_rate_sweep_history_size')
+    read_log(log_folder='logs/CIFAR10_10_public_10_epochs_1_eps_0.02_sample_rate_sweep_basis_size')
