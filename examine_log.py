@@ -62,7 +62,7 @@ def read_log(log_folder: str|Path):
     print(df)
     plt.title(f'{log_folder.stem}');
     plt.legend();
-    plt.savefig(f'plots/{log_folder.stem}.png') 
+    plt.savefig(f'plots/{log_folder.name}.png')
 
 if __name__ == '__main__':
 

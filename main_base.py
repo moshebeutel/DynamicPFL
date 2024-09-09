@@ -125,10 +125,11 @@ def main():
         assert 1==0
     for client_model in clients_models:
         client_model.load_state_dict(global_model.state_dict())
-    noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size, client_data_sizes)
-    print(noise_multiplier)
-    if args.no_noise:
-        noise_multiplier = 0
+    noise_multiplier = 0
+    if not args.no_noise:
+        noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size, client_data_sizes)
+        # noise_multiplier = 3.029
+    print('noise multiplier', noise_multiplier)
     for epoch in trange(global_epoch):
         sampled_client_indices = random.sample(range(num_clients), max(1, int(user_sample_rate * num_clients)))
         sampled_clients_models = [clients_models[i] for i in sampled_client_indices]

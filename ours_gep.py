@@ -18,16 +18,19 @@ from torch.optim import Optimizer
 import datetime
 
 # >>>  ***GEP
-from gep_utils import compute_subspace, embed_grad, flatten_tensor, project_back_embedding
+from gep_utils import (compute_subspace, embed_grad, flatten_tensor,
+                       project_back_embedding, add_new_gradients_to_history)
 # <<< ***GEP
-
 
 
 args = parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
 num_clients = args.num_clients
-num_public_clients = int(0.1 * num_clients)              # ***GEP 
-num_basis_elements = int(0.5 * num_public_clients)       # ***GEP
+# >>>  ***GEP
+num_public_clients = args.num_public_clients
+num_basis_elements = args.basis_size
+gradient_history_size = args.history_size
+# <<< ***GEP
 local_epoch = args.local_epoch
 global_epoch = args.global_epoch
 batch_size = args.batch_size
@@ -56,13 +59,12 @@ if args.store == True:
         f'--lr {args.lr} '
         f'--alpha {args.dir_alpha}'
         f'.txt'
-        ,'a'
-        )
+        , 'a'
+    )
     sys.stdout = file
 
+
 def local_update(model, dataloader, global_model):
-
-
     fisher_threshold = args.fisher_threshold
     model = model.to(device)
     global_model = global_model.to(device)
@@ -70,7 +72,6 @@ def local_update(model, dataloader, global_model):
     w_glob = [param.clone().detach() for param in global_model.parameters()]
 
     fisher_diag = compute_fisher_diag(model, dataloader)
-
 
     u_loc, v_loc = [], []
     for param, fisher_value in zip(model.parameters(), fisher_diag):
@@ -105,7 +106,6 @@ def local_update(model, dataloader, global_model):
             raise ValueError("Invalid regularization type")
 
         return ce_loss + reg_loss
-    
 
     optimizer1 = optim.Adam(model.parameters(), lr=args.lr)
 
@@ -138,15 +138,8 @@ def local_update(model, dataloader, global_model):
     with torch.no_grad():
         update = [(new_param - old_param).clone() for new_param, old_param in zip(model.parameters(), w_glob)]
 
-
     model = model.to('cpu')
     return update
-
-
-
-
-
-
 
 
 def test(client_model, client_testloader):
@@ -154,7 +147,6 @@ def test(client_model, client_testloader):
     client_model = client_model.to(device)
 
     num_data = 0
-
 
     correct = 0
     with torch.no_grad():
@@ -164,15 +156,15 @@ def test(client_model, client_testloader):
             _, predicted = torch.max(outputs, 1)
             correct += (predicted == labels).sum().item()
             num_data += labels.size(0)
-    
+
     accuracy = 100.0 * correct / num_data
 
     client_model = client_model.to('cpu')
 
     return accuracy
 
-def main():
 
+def main():
     mean_acc_s = []
     acc_matrix = []
     if dataset == 'MNIST':
@@ -180,7 +172,8 @@ def main():
         train_dataset, test_dataset = get_mnist_datasets()
         clients_train_set = get_clients_datasets(train_dataset, num_clients)
         client_data_sizes = [len(client_dataset) for client_dataset in clients_train_set]
-        clients_train_loaders = [DataLoader(client_dataset, batch_size=batch_size) for client_dataset in clients_train_set]
+        clients_train_loaders = [DataLoader(client_dataset, batch_size=batch_size) for client_dataset in
+                                 clients_train_set]
         clients_test_loaders = [DataLoader(test_dataset) for i in range(num_clients)]
 
         clients_models = [mnistNet() for _ in range(num_clients)]
@@ -202,66 +195,77 @@ def main():
         global_model = SVHNNet()
     else:
         print('undefined dataset')
-        assert 1==0
+        assert 1 == 0
     for client_model in clients_models:
         client_model.load_state_dict(global_model.state_dict())
 
     noise_multiplier = 0
     if not args.no_noise:
-        noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size, client_data_sizes)
+        # noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size, client_data_sizes)
+        noise_multiplier = 3.029
+
     print('noise multiplier', noise_multiplier)
 
-    
-        
-    public_clients_loaders = clients_train_loaders[:num_public_clients]    # ***GEP
-    public_clients_models = clients_models[:num_public_clients]            # ***GEP
-    
-    
+    # >>> ***GEP
+    public_clients_loaders = clients_train_loaders[:num_public_clients]
+    public_clients_models = clients_models[:num_public_clients]
+    history_gradient_per_layer = [None for _ in global_model.parameters()]
+    # <<< ***GEP
+
     for epoch in trange(global_epoch):
-        
+
         # >>>  ***GEP
-        
+
         # get public clients gradients for current global model state
         public_clients_model_updates = []
-        for idx, (public_client_model, public_client_loader) in enumerate(zip(public_clients_models, public_clients_loaders)):
+        for idx, (public_client_model, public_client_loader) in enumerate(
+                zip(public_clients_models, public_clients_loaders)):
             public_client_model_backup = copy.deepcopy(public_client_model)
             public_client_update = local_update(public_client_model, public_client_loader, global_model)
             public_clients_model_updates.append(public_client_update)
-            clients_models[idx] = public_client_model_backup       # do not update public models during pca update
-        
+            clients_models[idx] = public_client_model_backup  # do not update public models during pca update
+
         # compute basis for subspace spanned by public gradients
         pca_per_layer = []
-        for i,p in enumerate(global_model.parameters()):
+        for i, p in enumerate(global_model.parameters()):
             layer_updates = [public_client_update[i] for public_client_update in public_clients_model_updates]
             flattened_layer_update = flatten_tensor(layer_updates)
-            pca = compute_subspace(flattened_layer_update, num_basis_elements)    
+
+            # update gradient history
+            basis_gradients = history_gradient_per_layer[i]
+            basis_gradients = add_new_gradients_to_history(flattened_layer_update, basis_gradients,
+                                                           gradient_history_size)
+            history_gradient_per_layer[i] = basis_gradients
+
+            # compute new subspace basis
+            pca = compute_subspace(basis_gradients, num_basis_elements)
             pca_per_layer.append(pca)
-        
+
         # <<< ***GEP
-        
-        
+
         sampled_client_indices = random.sample(range(num_clients), max(1, int(user_sample_rate * num_clients)))
         sampled_clients_models = [clients_models[i] for i in sampled_client_indices]
         sampled_clients_train_loaders = [clients_train_loaders[i] for i in sampled_client_indices]
         sampled_clients_test_loaders = [clients_test_loaders[i] for i in sampled_client_indices]
         clients_model_updates = []
         clients_accuracies = []
-        for idx, (client_model, client_trainloader, client_testloader) in enumerate(zip(sampled_clients_models, sampled_clients_train_loaders, sampled_clients_test_loaders)):
+        for idx, (client_model, client_trainloader, client_testloader) in enumerate(
+                zip(sampled_clients_models, sampled_clients_train_loaders, sampled_clients_test_loaders)):
             if not args.store:
-                tqdm.write(f'client:{idx+1}/{args.num_clients}')
+                tqdm.write(f'client:{idx + 1}/{args.num_clients}')
             client_update = local_update(client_model, client_trainloader, global_model)
             clients_model_updates.append(client_update)
             accuracy = test(client_model, client_testloader)
             clients_accuracies.append(accuracy)
         print(clients_accuracies)
-        mean_acc_s.append(sum(clients_accuracies)/len(clients_accuracies))
+        mean_acc_s.append(sum(clients_accuracies) / len(clients_accuracies))
         acc_matrix.append(clients_accuracies)
         sampled_client_data_sizes = [client_data_sizes[i] for i in sampled_client_indices]
         sampled_client_weights = [
             sampled_client_data_size / sum(sampled_client_data_sizes)
             for sampled_client_data_size in sampled_client_data_sizes
         ]
-        
+
         # >>> ***GEP embed clients updates in subspace spanned by public clients
         embedded_clients_model_updates = [[] for _ in range(len(sampled_client_indices))]
         for i, p in enumerate(global_model.parameters()):
@@ -270,10 +274,10 @@ def main():
             embedded_update = embed_grad(flattened_layer_update, pca_per_layer[i])
             for j, sampled_update in enumerate(embedded_clients_model_updates):
                 sampled_update.append(embedded_update[j])
-            
+
         clients_model_updates = embedded_clients_model_updates
         # <<< ***GEP
-        
+
         clipped_updates = []
         for idx, client_update in enumerate(clients_model_updates):
             if not args.no_clip:
@@ -285,17 +289,16 @@ def main():
             clipped_updates.append(clipped_update)
         noisy_updates = []
         for clipped_update in clipped_updates:
-            noise_stddev = torch.sqrt(torch.tensor((clipping_bound**2) * (noise_multiplier**2) / num_clients))
+            noise_stddev = torch.sqrt(torch.tensor((clipping_bound ** 2) * (noise_multiplier ** 2) / num_clients))
             noise = [torch.randn_like(param) * noise_stddev for param in clipped_update]
             noisy_update = [clipped_param + noise_param for clipped_param, noise_param in zip(clipped_update, noise)]
             noisy_updates.append(noisy_update)
-            
+
         # >>>> ***GEP project back the noisy embeddings
-            
-        noisy_updates = [[project_back_embedding(layer_update, pca, device).reshape(param.shape) 
-                          for (layer_update, pca, param) in zip(client_update, pca_per_layer, global_model.parameters())]
-                         for client_update in noisy_updates]   # ***GEP
-        
+        noisy_updates = [[project_back_embedding(layer_update, pca, device).reshape(param.shape)
+                          for (layer_update, pca, param) in
+                          zip(client_update, pca_per_layer, global_model.parameters())]
+                         for client_update in noisy_updates]
         # <<<< ***GEP
 
         aggregated_update = [
@@ -333,4 +336,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
