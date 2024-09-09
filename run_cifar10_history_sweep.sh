@@ -12,8 +12,15 @@ DELTA=1e-5
 PUBLIC_CLIENTS=10
 
 LOG_FOLDER="logs/${DATASET}_${N_PUBLIC}_public_${EPOCHS}_epochs_${EPS}_eps_${SAMPLE_RATE}_sample_rate_sweep_history_size"
-echo Create Log Folder $LOG_FOLDER
-mkdir "$LOG_FOLDER"
+# Check if the folder exists
+if [ ! -d "$LOG_FOLDER" ]; then
+    # If the folder does not exist, create it
+    mkdir -p "$LOG_FOLDER"
+    echo "Folder created at $LOG_FOLDER"
+else
+    # If the folder exists, output a message
+    echo "Folder already exists at $LOG_FOLDER"
+fi
 
 ARGUMENTS=(--dataset ${DATASET} --num_clients ${N_CLIENTS} --user_sample_rate ${SAMPLE_RATE} --global_epoch ${EPOCHS} --local_epoch ${LOCAL_EPOCHS} --target_epsilon ${EPS} --target_delta ${DELTA})
 
