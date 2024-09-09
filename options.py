@@ -16,10 +16,10 @@ def parse_args():
                                                                      " span subspace")
     # <<< ***GEP
 
-    parser.add_argument('--user_sample_rate', type=float, default=0.1, help="Sample rate for user sampling")
+    parser.add_argument('--user_sample_rate', type=float, default=0.02, help="Sample rate for user sampling")
 
-    parser.add_argument('--target_epsilon', type=float, default=1, help="Target privacy budget epsilon")
-    parser.add_argument('--target_delta', type=float, default=1e-1, help="Target privacy budget delta")
+    parser.add_argument('--target_epsilon', type=float, default=2, help="Target privacy budget epsilon")
+    parser.add_argument('--target_delta', type=float, default=0.002, help="Target privacy budget delta")
     parser.add_argument('--clipping_bound', type=float, default=0.5, help="Gradient clipping bound")
 
     parser.add_argument('--fisher_threshold', type=float, default=0.4, help="Fisher information threshold for parameter selection")

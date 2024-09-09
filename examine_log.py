@@ -11,8 +11,9 @@ def read_log(log_folder: str|Path):
     
     dfs=[]
     i=0 
-    
-    for log_file_path in log_folder.iterdir():
+
+    for log_file_path in log_folder.glob('*.txt'):
+
 
         print(log_file_path.name)
 
@@ -45,7 +46,7 @@ def read_log(log_folder: str|Path):
 
         plt.plot(arr, label=log_file_path.name);
 
-        df = pd.DataFrame({'dataset':'CIFAR10',
+        df = pd.DataFrame({'dataset':'SVHN',
                         'method':log_file_path.name,
                         'mean':np.mean(arr),
                         'std':np.std(arr),
@@ -56,12 +57,12 @@ def read_log(log_folder: str|Path):
         i+=1
 
         dfs.append(df)
-
+    
     df=pd.concat(dfs, ignore_index=True)
     print(df)
     plt.title(f'{log_folder.stem}');
     plt.legend();
-    plt.savefig(f'plots/{log_folder.stem}.png') 
+    plt.savefig(f'plots/{log_folder.name}.png')
 
 if __name__ == '__main__':
 

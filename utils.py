@@ -15,15 +15,16 @@ def compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_e
         target_epsilon=target_epsilon,
         target_delta=target_delta,
         sample_rate=sample_rate,
-        steps=total_steps, 
-        accountant="rdp"
+        steps=total_steps,
+        accountant="rdp",
+        epsilon_tolerance=0.1,
+        alphas= [alpha/10.0 for alpha in range(11, 10000, 11)]
     )
+
+    print(f'noise_multiplier {noise_multiplier} to achieve {target_epsilon, target_delta}-DP')
 
     return noise_multiplier
 
-# def compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size, client_data_sizes):
-#     # for cifar10
-#     return 0.1
 
 def compute_fisher_diag(model, dataloader):
 
