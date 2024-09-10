@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-    
+
 class mnistNet(nn.Module):
     def __init__(self):
         super(mnistNet, self).__init__()
@@ -25,9 +25,6 @@ class mnistNet(nn.Module):
         x = self.fc2(x)
         output = F.log_softmax(x, dim=1)
         return output
-    
-
-
 
 
 class cifar10Net(nn.Module):
@@ -37,21 +34,19 @@ class cifar10Net(nn.Module):
         self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
         self.conv3 = nn.Conv2d(32, 32, 3, padding=1)
         self.pool = nn.MaxPool2d(2, stride=2)
-        self.fc1 = nn.Linear(32*4*4, 32*4*4)
-        self.fc2 = nn.Linear(32*4*4, 32*2*2)
-        self.fc3 = nn.Linear(32*2*2, 10)
+        self.fc1 = nn.Linear(32 * 4 * 4, 32 * 4 * 4)
+        self.fc2 = nn.Linear(32 * 4 * 4, 32 * 2 * 2)
+        self.fc3 = nn.Linear(32 * 2 * 2, 10)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = self.pool(F.relu(self.conv3(x)))
-        x = x.view(-1, 32*4*4)
+        x = x.view(-1, 32 * 4 * 4)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
-
-
 
 
 class femnistNet(nn.Module):
@@ -103,7 +98,7 @@ class SVHNNet(nn.Module):
         self.conv2 = nn.Conv2d(32, 64, 3, 1)
         self.dropout1 = nn.Dropout(0.25)
         self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(64 * 14 * 14, 128) # Adjusted linear layer size
+        self.fc1 = nn.Linear(64 * 14 * 14, 128)  # Adjusted linear layer size
         self.fc2 = nn.Linear(128, 10)  # 10 classes for the digits 0-9
 
     def forward(self, x):
@@ -120,5 +115,3 @@ class SVHNNet(nn.Module):
         x = self.fc2(x)
         output = F.log_softmax(x, dim=1)
         return output
-
-

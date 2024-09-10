@@ -194,6 +194,10 @@ def main():
 
         clients_models = [SVHNNet() for _ in range(num_clients)]
         global_model = SVHNNet()
+    elif dataset == 'putEMG':
+        clients_train_loaders, clients_test_loaders, client_data_sizes = get_dataloaders()
+        clients_models = [EMGModel(num_features=24 * 8, num_classes=8, use_softmax=True) for _ in range(num_clients)]
+        global_model = EMGModel(num_features=24 * 8, num_classes=8, use_softmax=True)
     else:
         print('undefined dataset')
         assert 1 == 0

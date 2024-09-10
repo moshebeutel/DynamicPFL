@@ -56,7 +56,7 @@ if args.store == True:
 def local_update(model, dataloader):
     model.train()
     model = model.to(device)
-    optimizer = optim.Adam(params=model.parameters(), lr = args.lr)
+    optimizer = optim.Adam(params=model.parameters(), lr=args.lr)
     loss_fn = nn.CrossEntropyLoss()
     for _ in range(local_epoch):
         for data, labels in dataloader:
@@ -116,14 +116,20 @@ def main():
         clients_train_loaders, clients_test_loaders, client_data_sizes = get_SVHN(args.dir_alpha, num_clients)
         clients_models = [SVHNNet() for _ in range(num_clients)]
         global_model = SVHNNet()
+    elif dataset == 'putEMG':
+        clients_train_loaders, clients_test_loaders, client_data_sizes = get_dataloaders()
+        clients_models = [EMGModel(num_features=24 * 8, num_classes=8, use_softmax=True) for _ in range(num_clients)]
+        global_model = EMGModel(num_features=24 * 8, num_classes=8, use_softmax=True)
     else:
-        print('undifined dataset')
-        assert 1==0
+        print('undefined dataset')
+        assert 1 == 0
     for client_model in clients_models:
         client_model.load_state_dict(global_model.state_dict())
+
     noise_multiplier = 0
     if not args.no_noise:
-        noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size, client_data_sizes)
+        noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size,
+                                                    client_data_sizes)
         # noise_multiplier = 3.029
     print('noise multiplier', noise_multiplier)
     for epoch in trange(global_epoch):
@@ -133,16 +139,18 @@ def main():
         sampled_clients_test_loaders = [clients_test_loaders[i] for i in sampled_client_indices]
         clients_model_updates = []
         clients_accuracies = []
-        for idx, (client_model, client_trainloader, client_testloader) in enumerate(zip(sampled_clients_models, sampled_clients_train_loaders, sampled_clients_test_loaders)):
+        for idx, (client_model, client_trainloader, client_testloader) in enumerate(
+                zip(sampled_clients_models, sampled_clients_train_loaders, sampled_clients_test_loaders)):
             if not args.store:
-                tqdm.write(f'client:{idx+1}/{args.num_clients}')
+                tqdm.write(f'client:{idx + 1}/{args.num_clients}')
             local_model = local_update(client_model, client_trainloader)
-            client_update = [param.data - global_weight for param, global_weight in zip(client_model.parameters(), global_model.parameters())]
+            client_update = [param.data - global_weight for param, global_weight in
+                             zip(client_model.parameters(), global_model.parameters())]
             clients_model_updates.append(client_update)
             accuracy = test(client_model, client_testloader)
             clients_accuracies.append(accuracy)
         print(clients_accuracies)
-        mean_acc_s.append(sum(clients_accuracies)/len(clients_accuracies))
+        mean_acc_s.append(sum(clients_accuracies) / len(clients_accuracies))
         print(mean_acc_s)
         acc_matrix.append(clients_accuracies)
         sampled_client_data_sizes = [client_data_sizes[i] for i in sampled_client_indices]
@@ -161,7 +169,7 @@ def main():
             clipped_updates.append(clipped_update)
         noisy_updates = []
         for clipped_update in clipped_updates:
-            noise_stddev = torch.sqrt(torch.tensor((clipping_bound**2) * (noise_multiplier**2) / num_clients))
+            noise_stddev = torch.sqrt(torch.tensor((clipping_bound ** 2) * (noise_multiplier ** 2) / num_clients))
             noise = [torch.randn_like(param) * noise_stddev for param in clipped_update]
             noisy_update = [clipped_param + noise_param for clipped_param, noise_param in zip(clipped_update, noise)]
             noisy_updates.append(noisy_update)
@@ -203,4 +211,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
