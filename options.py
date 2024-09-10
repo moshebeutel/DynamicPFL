@@ -3,13 +3,13 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description="")
 
-    parser.add_argument('--num_clients', type=int, default=500, help="Number of clients")
+    parser.add_argument('--num_clients', type=int, default=44, help="Number of clients")
     parser.add_argument('--local_epoch', type=int, default=4, help="Number of local epochs")
     parser.add_argument('--global_epoch', type=int, default=40, help="Number of global epochs")
-    parser.add_argument('--batch_size', type=int, default=64, help="Batch size")
+    parser.add_argument('--batch_size', type=int, default=32, help="Batch size")
 
     # >>> ***GEP
-    parser.add_argument('--num_public_clients', type=int, default=10,
+    parser.add_argument('--num_public_clients', type=int, default=5,
                         help="Number of public clients for gradient embedding subspace compute")
     parser.add_argument('--basis_size', type=int, default=5, help="Embedding subspace basis size")
     parser.add_argument('--history_size', type=int, default=30, help="Previous Gradients used to"
@@ -20,7 +20,7 @@ def parse_args():
 
     parser.add_argument('--target_epsilon', type=float, default=2, help="Target privacy budget epsilon")
     parser.add_argument('--target_delta', type=float, default=0.002, help="Target privacy budget delta")
-    parser.add_argument('--clipping_bound', type=float, default=0.5, help="Gradient clipping bound")
+    parser.add_argument('--clipping_bound', type=float, default=0.01, help="Gradient clipping bound")
 
     parser.add_argument('--fisher_threshold', type=float, default=0.4, help="Fisher information threshold for parameter selection")
     parser.add_argument('--lambda_1', type=float, default=0.1, help="Lambda value for EWC regularization term")
@@ -33,7 +33,7 @@ def parse_args():
     parser.add_argument('--no_clip', action='store_true')
     parser.add_argument('--no_noise', action='store_true')
 
-    parser.add_argument('--dataset', type=str, default='CIFAR10')
+    parser.add_argument('--dataset', type=str, default='putEMG')
 
     parser.add_argument('--dir_alpha', type=float, default=100)
 

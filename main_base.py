@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
+from emg_utils import get_dataloaders, get_user_list
 # from opacus import PrivacyEngine
 from options import parse_args
 from data import *
@@ -69,15 +70,11 @@ def local_update(model, dataloader):
     return model
 
 
-
-
-
 def test(client_model, client_testloader):
     client_model.eval()
     client_model = client_model.to(device)
 
     num_data = 0
-
 
     correct = 0
     with torch.no_grad():
@@ -87,7 +84,7 @@ def test(client_model, client_testloader):
             _, predicted = torch.max(outputs, 1)
             correct += (predicted == labels).sum().item()
             num_data += labels.size(0)
-    
+
     accuracy = 100.0 * correct / num_data
 
     client_model = client_model.to('cpu')
@@ -95,16 +92,15 @@ def test(client_model, client_testloader):
     return accuracy
 
 
-
 def main():
-
     mean_acc_s = []
     acc_matrix = []
     if dataset == 'MNIST':
         train_dataset, test_dataset = get_mnist_datasets()
         clients_train_set = get_clients_datasets(train_dataset, num_clients)
         client_data_sizes = [len(client_dataset) for client_dataset in clients_train_set]
-        clients_train_loaders = [DataLoader(client_dataset, batch_size=batch_size) for client_dataset in clients_train_set]
+        clients_train_loaders = [DataLoader(client_dataset, batch_size=batch_size) for client_dataset in
+                                 clients_train_set]
         clients_test_loaders = [DataLoader(test_dataset) for i in range(num_clients)]
         clients_models = [mnistNet() for _ in range(num_clients)]
         global_model = mnistNet()
