@@ -186,11 +186,11 @@ def main():
 
         clients_models = [cifar10Net() for _ in range(num_clients)]
         global_model = cifar10Net()
-    elif dataset == 'FEMNIST':
-        clients_train_loaders, clients_test_loaders, client_data_sizes = get_FEMNIST(num_clients)
-
-        clients_models = [femnistNet() for _ in range(num_clients)]
-        global_model = femnistNet()
+    # elif dataset == 'FEMNIST':
+    #     clients_train_loaders, clients_test_loaders, client_data_sizes = get_FEMNIST(num_clients)
+    #
+    #     clients_models = [femnistNet() for _ in range(num_clients)]
+    #     global_model = femnistNet()
     elif dataset == 'SVHN':
         clients_train_loaders, clients_test_loaders, client_data_sizes = get_SVHN(args.dir_alpha, num_clients)
 

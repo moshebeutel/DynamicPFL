@@ -209,107 +209,107 @@ def get_iid_cifar10(num_clients: int) -> Tuple[List[DataLoader], List[DataLoader
 
 
 
-
-
-#FEMNIST-------------------------------------------------------------------------------------------
-import tensorflow as tf
-import tensorflow_federated as tff
-import torch
-from torchvision import transforms
-from torch.utils.data import DataLoader, Dataset
-
-class TFDatasetToTorch(Dataset):
-    def __init__(self, data, transform=None):
-        self.transform = transform
-        self.data = []
-        for image, label in data:
-            image = image.copy()
-            label = label.copy().squeeze()
-            label = torch.tensor(label, dtype=torch.long)
-            self.data.append((image, label))
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        image, label = self.data[idx]
-        if self.transform:
-            image = self.transform(image)
-        return image, label
-
-
-def get_FEMNIST(numOfClients):
-
-    config = tf.compat.v1.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.02
-    session = tf.compat.v1.Session(config=config)
-
-    raw_train, raw_test = tff.simulation.datasets.emnist.load_data(cache_dir='../data/emnist', only_digits=False)
-
-    def train_preprocess(dataset):
-        def batch_format_fn(element):
-            return (tf.reshape(element['pixels'], [28, 28]), 
-                    tf.reshape(element['label'], [1]))
-        return dataset.map(batch_format_fn) 
-
-    def test_preprocess(dataset):
-        def batch_format_fn(element):
-            return (tf.reshape(element['pixels'], [28, 28]), 
-                    tf.reshape(element['label'], [1]))
-        return dataset.map(batch_format_fn)
-
-    raw_train = raw_train.preprocess(train_preprocess)
-    raw_test = raw_test.preprocess(test_preprocess)
-
-    train_transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.RandomRotation(20),
-        transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
-    ])
-
-    test_transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
-    ])
-
-    trainSetList = []
-    for cid in raw_train.client_ids[:numOfClients]:
-        data_train = list(raw_train.create_tf_dataset_for_client(cid).as_numpy_iterator())
-        trainSetList.append(TFDatasetToTorch(data_train, transform=train_transform))
-
-    testSetList = []
-    for cid in raw_test.client_ids[:numOfClients]:
-        data_test = list(raw_test.create_tf_dataset_for_client(cid).as_numpy_iterator())
-        testSetList.append(TFDatasetToTorch(data_test, transform=test_transform))
-
-    client_data_sizes = []
-
-    train_loaders = []
-    for subset in trainSetList:
-        train_loader = DataLoader(
-            subset, 
-            batch_size=args.batch_size, 
-            num_workers=4, 
-            pin_memory=True, 
-            shuffle=True
-        )
-        train_loaders.append(train_loader)
-        client_data_sizes.append(len(subset))
-
-    test_loaders = []
-    for subset in testSetList:
-        test_loader = DataLoader(
-            subset, 
-            batch_size=args.batch_size, 
-            num_workers=4, 
-            pin_memory=True, 
-            shuffle=True
-        )
-        test_loaders.append(test_loader)
-
-    return train_loaders, test_loaders, client_data_sizes
+#
+#
+# #FEMNIST-------------------------------------------------------------------------------------------
+# import tensorflow as tf
+# import tensorflow_federated as tff
+# import torch
+# from torchvision import transforms
+# from torch.utils.data import DataLoader, Dataset
+#
+# class TFDatasetToTorch(Dataset):
+#     def __init__(self, data, transform=None):
+#         self.transform = transform
+#         self.data = []
+#         for image, label in data:
+#             image = image.copy()
+#             label = label.copy().squeeze()
+#             label = torch.tensor(label, dtype=torch.long)
+#             self.data.append((image, label))
+#
+#     def __len__(self):
+#         return len(self.data)
+#
+#     def __getitem__(self, idx):
+#         image, label = self.data[idx]
+#         if self.transform:
+#             image = self.transform(image)
+#         return image, label
+#
+#
+# def get_FEMNIST(numOfClients):
+#
+#     config = tf.compat.v1.ConfigProto()
+#     config.gpu_options.per_process_gpu_memory_fraction = 0.02
+#     session = tf.compat.v1.Session(config=config)
+#
+#     raw_train, raw_test = tff.simulation.datasets.emnist.load_data(cache_dir='../data/emnist', only_digits=False)
+#
+#     def train_preprocess(dataset):
+#         def batch_format_fn(element):
+#             return (tf.reshape(element['pixels'], [28, 28]),
+#                     tf.reshape(element['label'], [1]))
+#         return dataset.map(batch_format_fn)
+#
+#     def test_preprocess(dataset):
+#         def batch_format_fn(element):
+#             return (tf.reshape(element['pixels'], [28, 28]),
+#                     tf.reshape(element['label'], [1]))
+#         return dataset.map(batch_format_fn)
+#
+#     raw_train = raw_train.preprocess(train_preprocess)
+#     raw_test = raw_test.preprocess(test_preprocess)
+#
+#     train_transform = transforms.Compose([
+#         transforms.ToPILImage(),
+#         transforms.RandomRotation(20),
+#         transforms.ToTensor(),
+#         transforms.Normalize((0.1307,), (0.3081,))
+#     ])
+#
+#     test_transform = transforms.Compose([
+#         transforms.ToPILImage(),
+#         transforms.ToTensor(),
+#         transforms.Normalize((0.1307,), (0.3081,))
+#     ])
+#
+#     trainSetList = []
+#     for cid in raw_train.client_ids[:numOfClients]:
+#         data_train = list(raw_train.create_tf_dataset_for_client(cid).as_numpy_iterator())
+#         trainSetList.append(TFDatasetToTorch(data_train, transform=train_transform))
+#
+#     testSetList = []
+#     for cid in raw_test.client_ids[:numOfClients]:
+#         data_test = list(raw_test.create_tf_dataset_for_client(cid).as_numpy_iterator())
+#         testSetList.append(TFDatasetToTorch(data_test, transform=test_transform))
+#
+#     client_data_sizes = []
+#
+#     train_loaders = []
+#     for subset in trainSetList:
+#         train_loader = DataLoader(
+#             subset,
+#             batch_size=args.batch_size,
+#             num_workers=4,
+#             pin_memory=True,
+#             shuffle=True
+#         )
+#         train_loaders.append(train_loader)
+#         client_data_sizes.append(len(subset))
+#
+#     test_loaders = []
+#     for subset in testSetList:
+#         test_loader = DataLoader(
+#             subset,
+#             batch_size=args.batch_size,
+#             num_workers=4,
+#             pin_memory=True,
+#             shuffle=True
+#         )
+#         test_loaders.append(test_loader)
+#
+#     return train_loaders, test_loaders, client_data_sizes
 
 
 
