@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from argparse import ArgumentParser
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -61,6 +62,7 @@ def read_log(log_folder: str | Path):
         dfs.append(df)
 
     df = pd.concat(dfs, ignore_index=True)
+    df.to_csv(log_folder / f'{log_folder.stem.replace("0.", "0_")}.csv', index=False)
     print(df)
     plt.title(f'{log_folder.stem}');
     plt.legend();
@@ -70,4 +72,8 @@ def read_log(log_folder: str | Path):
 if __name__ == '__main__':
     # read_log(log_folder='logs/basline')
     # read_log(log_folder='logs/ours_gep_first')
-    read_log(log_folder='logs/putEMG_5_public_3_basis_5_history')
+    # read_log(log_folder='logs/CIFAR10_10_public_100_epochs_2_eps_0.02_sample_rate_sweep_basis_size')
+    parser = ArgumentParser('Examine Logs')
+    parser.add_argument('log_folder', type=str)
+    args = parser.parse_args()
+    read_log(log_folder=args.log_folder)
