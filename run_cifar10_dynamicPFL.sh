@@ -5,12 +5,12 @@ SAMPLE_RATE=0.0312
 EPOCHS=5
 LOCAL_EPOCHS=2
 DATASET="CIFAR10"
-EPS=2
+EPS=8
 DELTA=0.001953125
 PUBLIC_CLIENTS=10
 BASIS_SIZE=5
 HISTORY_SIZE=10
-LOG_FOLDER="logs/${DATASET}_${PUBLIC_CLIENTS}_public_${BASIS_SIZE}_basis_${HISTORY_SIZE}_history"
+LOG_FOLDER="logs/${DATASET}_${PUBLIC_CLIENTS}_public_${BASIS_SIZE}_basis_${HISTORY_SIZE}_history_${EPS}_epsilon"
 # Check if the folder exists
 if [ ! -d "$LOG_FOLDER" ]; then
     # If the folder does not exist, create it
