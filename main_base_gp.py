@@ -57,14 +57,14 @@ if args.store == True:
     sys.stdout = file
 
 
-def local_update(model, dataloader, gp):
+def local_update(model, dataloader, cid, GPs):
     model.train()
     model = model.to(device)
     optimizer = optim.Adam(params=model.parameters(), lr=args.lr)
 
     # build tree at each step
-    gp, label_map, _, __ = build_tree(model, dataloader, gp)
-    gp.train()
+    GPs[cid], label_map, _, _ = build_tree(model, dataloader, cid, GPs)
+    GPs[cid].train()
 
     for _ in range(local_epoch):
         optimizer.zero_grad()
@@ -80,18 +80,18 @@ def local_update(model, dataloader, gp):
         offset_labels = torch.tensor([label_map[l.item()] for l in Y], dtype=Y.dtype,
                                      device=Y.device)
 
-        loss = gp(X, offset_labels, to_print=args.eval_every)
+        loss = GPs[cid](X, offset_labels, to_print=args.eval_every)
         # loss *= args.loss_scaler
 
         # propagate loss
         loss.backward()
         # torch.nn.utils.clip_grad_norm_(curr_global_net.parameters(), 50)
         optimizer.step()
+    GPs[cid].tree = None
+    return model.to('cpu'), GPs[cid]
 
-    return model.to('cpu'), gp
 
-
-def test(client_model, client_testloader, client_trainloader, gp):
+def test(client_model, client_testloader, client_trainloader, cid, GPs):
     client_model.eval()
     client_model = client_model.to(device)
 
@@ -101,8 +101,8 @@ def test(client_model, client_testloader, client_trainloader, gp):
     running_loss = 0.
 
     # build tree at each step
-    gp, label_map, Y_train, X_train = build_tree(client_model, client_trainloader, gp)
-    gp.eval()
+    GPs[cid], label_map, Y_train, X_train = build_tree(client_model, client_trainloader, cid, GPs)
+    GPs[cid].eval()
 
     with torch.no_grad():
         for data, labels in client_testloader:
@@ -112,7 +112,7 @@ def test(client_model, client_testloader, client_trainloader, gp):
                                   device=label.device)
 
             X_test = client_model(img)
-            loss, pred = gp.forward_eval(X_train, Y_train, X_test, Y_test, is_first_iter)
+            loss, pred = GPs[cid].forward_eval(X_train, Y_train, X_test, Y_test, is_first_iter)
             batch_size = Y_test.shape[0]
             running_loss += (loss.item() * batch_size)
             correct += pred.argmax(1).eq(Y_test).sum().item()
@@ -176,32 +176,31 @@ def main():
     print('noise multiplier', noise_multiplier)
     assert classes_per_client > 0, f'classes per client not defined'
     GPs = torch.nn.ModuleList([])
-    for client_id in range(num_clients):
+    for _ in range(num_clients):
         GPs.append(pFedGPFullLearner(args, classes_per_client))
 
-    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        level=logging.WARN
-                        )
     pbar = trange(global_epoch)
     for epoch in pbar:
         sampled_client_indices = random.sample(range(num_clients), max(1, int(user_sample_rate * num_clients)))
         sampled_clients_models = [clients_models[i] for i in sampled_client_indices]
         sampled_clients_train_loaders = [clients_train_loaders[i] for i in sampled_client_indices]
         sampled_clients_test_loaders = [clients_test_loaders[i] for i in sampled_client_indices]
-        sampled_GPs = [GPs[i] for i in sampled_client_indices]
+
         clients_model_updates = []
         clients_accuracies = []
-        for idx, (client_model, client_trainloader, client_testloader, gp) in enumerate(
-                zip(sampled_clients_models, sampled_clients_train_loaders, sampled_clients_test_loaders, sampled_GPs)):
-            # if not args.store:
-            #     tqdm.write(f'client:{idx + 1}/{args.num_clients}')
+        for idx, (client_model, client_trainloader, client_testloader, cid) in enumerate(
+                zip(sampled_clients_models, sampled_clients_train_loaders, sampled_clients_test_loaders,
+                    sampled_client_indices)):
+
             pbar.set_description(f'Epoch {epoch} Client in Iter {idx + 1} Client ID {sampled_client_indices[idx]}')
-            local_model, gp = local_update(client_model, client_trainloader, gp)
+
+            local_model, GPs[cid] = local_update(client_model, client_trainloader, cid, GPs)
             client_update = [param.data - global_weight for param, global_weight in
                              zip(client_model.parameters(), global_model.parameters())]
             clients_model_updates.append(client_update)
-            accuracy = test(client_model, client_testloader, client_trainloader, gp)
+            accuracy = test(client_model, client_testloader, client_trainloader, cid, GPs)
             clients_accuracies.append(accuracy)
+
         print(clients_accuracies)
         mean_acc_s.append(sum(clients_accuracies) / len(clients_accuracies))
         print(mean_acc_s)

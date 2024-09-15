@@ -2,7 +2,7 @@ import torch
 
 
 @torch.no_grad()
-def build_tree(net, loader, gp):
+def build_tree(net, loader, cid, GPs):
     """
     Build GP tree per client
     :return: List of GPs
@@ -22,6 +22,6 @@ def build_tree(net, loader, gp):
     offset_labels = torch.tensor([label_map[l.item()] for l in Y], dtype=Y.dtype,
                                  device=Y.device)
 
-    gp.build_base_tree(X, offset_labels)  # build tree
-    return gp, label_map, offset_labels, X
+    GPs[cid].build_base_tree(X, offset_labels)  # build tree
+    return GPs[cid], label_map, offset_labels, X
 
