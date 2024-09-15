@@ -46,10 +46,10 @@ def read_log(log_folder: str | Path):
             lnumbers.append(float(n))
 
         arr = np.array(lnumbers)
-
+        dataset=log_folder.stem.split('_')[0]
         plt.plot(arr, label=log_file_path.name);
 
-        df = pd.DataFrame({'dataset': 'putEMG',
+        df = pd.DataFrame({'dataset': dataset,
                            'method': log_file_path.name,
                            'mean': np.mean(arr),
                            'std': np.std(arr),
