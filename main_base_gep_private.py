@@ -4,24 +4,21 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
-from opacus import PrivacyEngine
 from emg_utils import get_dataloaders
+# from opacus import PrivacyEngine
 from options import parse_args
 from data import *
 from net import *
 from tqdm import tqdm
-from utils import compute_noise_multiplier, compute_fisher_diag
-from tqdm.auto import trange, tqdm
+from utils import compute_noise_multiplier
+from tqdm.auto import trange
 import copy
 import sys
 import random
-from torch.optim import Optimizer
-import datetime
 
 # >>>  ***GEP
 from gep_utils import (compute_subspace, embed_grad, flatten_tensor,
                        project_back_embedding, add_new_gradients_to_history)
-import wandb
 # <<< ***GEP
 
 
@@ -49,6 +46,7 @@ if args.store == True:
         f'./txt/{args.dirStr}/'
         f'dataset {dataset} '
         f'--num_clients {num_clients} '
+        f'--user_sample_rate {args.user_sample_rate} '
         f'--local_epoch {local_epoch} '
         f'--global_epoch {global_epoch} '
         f'--batch_size {batch_size} '
@@ -66,82 +64,21 @@ if args.store == True:
     sys.stdout = file
 
 
-def local_update(model, dataloader, global_model):
-    fisher_threshold = args.fisher_threshold
+def local_update(model, dataloader):
+    model.train()
     model = model.to(device)
-    global_model = global_model.to(device)
-
-    w_glob = [param.clone().detach() for param in global_model.parameters()]
-
-    fisher_diag = compute_fisher_diag(model, dataloader)
-
-    u_loc, v_loc = [], []
-    for param, fisher_value in zip(model.parameters(), fisher_diag):
-        u_param = (param * (fisher_value > fisher_threshold)).clone().detach()
-        v_param = (param * (fisher_value <= fisher_threshold)).clone().detach()
-        u_loc.append(u_param)
-        v_loc.append(v_param)
-
-    u_glob, v_glob = [], []
-    for global_param, fisher_value in zip(global_model.parameters(), fisher_diag):
-        u_param = (global_param * (fisher_value > fisher_threshold)).clone().detach()
-        v_param = (global_param * (fisher_value <= fisher_threshold)).clone().detach()
-        u_glob.append(u_param)
-        v_glob.append(v_param)
-
-    for u_param, v_param, model_param in zip(u_loc, v_glob, model.parameters()):
-        model_param.data = u_param + v_param
-
-    saved_u_loc = [u.clone() for u in u_loc]
-
-    def custom_loss(outputs, labels, param_diffs, reg_type):
-        ce_loss = F.cross_entropy(outputs, labels)
-        if reg_type == "R1":
-            reg_loss = (args.lambda_1 / 2) * torch.sum(torch.stack([torch.norm(diff) for diff in param_diffs]))
-
-        elif reg_type == "R2":
-            C = args.clipping_bound
-            norm_diff = torch.sum(torch.stack([torch.norm(diff) for diff in param_diffs]))
-            reg_loss = (args.lambda_2 / 2) * torch.norm(norm_diff - C)
-
-        else:
-            raise ValueError("Invalid regularization type")
-
-        return ce_loss + reg_loss
-
-    optimizer1 = optim.Adam(model.parameters(), lr=args.lr)
-
-    for epoch in range(args.local_epoch):
+    optimizer = optim.Adam(params=model.parameters(), lr=args.lr)
+    loss_fn = nn.CrossEntropyLoss()
+    for _ in range(local_epoch):
         for data, labels in dataloader:
             data, labels = data.to(device), labels.to(device)
-            optimizer1.zero_grad()
+            optimizer.zero_grad()
             outputs = model(data)
-            param_diffs = [u_new - u_old for u_new, u_old in zip(model.parameters(), w_glob)]
-            loss = custom_loss(outputs, labels, param_diffs, "R1")
+            loss = loss_fn(outputs, labels)
             loss.backward()
-            with torch.no_grad():
-                for model_param, u_param in zip(model.parameters(), u_loc):
-                    model_param.grad *= (u_param != 0)
-            optimizer1.step()
-    optimizer2 = optim.Adam(model.parameters(), lr=args.lr)
-    for epoch in range(args.local_epoch):
-        for data, labels in dataloader:
-            data, labels = data.to(device), labels.to(device)
-            optimizer2.zero_grad()
-            outputs = model(data)
-            param_diffs = [model_param - w_old for model_param, w_old in zip(model.parameters(), w_glob)]
-            loss = custom_loss(outputs, labels, param_diffs, "R2")
-            loss.backward()
-            with torch.no_grad():
-                for model_param, v_param in zip(model.parameters(), v_glob):
-                    model_param.grad *= (v_param != 0)
-            optimizer2.step()
-
-    with torch.no_grad():
-        update = [(new_param - old_param).clone() for new_param, old_param in zip(model.parameters(), w_glob)]
-
-    model = model.to('cpu')
-    return update
+            optimizer.step()
+    # model = model.to('cpu')
+    return model
 
 
 def test(client_model, client_testloader):
@@ -170,29 +107,24 @@ def main():
     mean_acc_s = []
     acc_matrix = []
     if dataset == 'MNIST':
-
         train_dataset, test_dataset = get_mnist_datasets()
         clients_train_set = get_clients_datasets(train_dataset, num_clients)
         client_data_sizes = [len(client_dataset) for client_dataset in clients_train_set]
         clients_train_loaders = [DataLoader(client_dataset, batch_size=batch_size) for client_dataset in
                                  clients_train_set]
         clients_test_loaders = [DataLoader(test_dataset) for i in range(num_clients)]
-
         clients_models = [mnistNet() for _ in range(num_clients)]
         global_model = mnistNet()
     elif dataset == 'CIFAR10':
         clients_train_loaders, clients_test_loaders, client_data_sizes = get_CIFAR10(args.dir_alpha, num_clients)
-
         clients_models = [cifar10Net() for _ in range(num_clients)]
         global_model = cifar10Net()
     # elif dataset == 'FEMNIST':
     #     clients_train_loaders, clients_test_loaders, client_data_sizes = get_FEMNIST(num_clients)
-    #
     #     clients_models = [femnistNet() for _ in range(num_clients)]
     #     global_model = femnistNet()
     elif dataset == 'SVHN':
         clients_train_loaders, clients_test_loaders, client_data_sizes = get_SVHN(args.dir_alpha, num_clients)
-
         clients_models = [SVHNNet() for _ in range(num_clients)]
         global_model = SVHNNet()
     elif dataset == 'putEMG':
@@ -200,56 +132,26 @@ def main():
         clients_models = [EMGModel(num_features=24 * 8, num_classes=8, use_softmax=True) for _ in range(num_clients)]
         global_model = EMGModel(num_features=24 * 8, num_classes=8, use_softmax=True)
     else:
-        print('undefined dataset')
+        print('undifined dataset')
         assert 1 == 0
+
+    global_model.to(device)
     for client_model in clients_models:
         client_model.load_state_dict(global_model.state_dict())
+        client_model.to(device)
 
     noise_multiplier = 0
     if not args.no_noise:
-        noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size, client_data_sizes)
-        # noise_multiplier = 3.029
-
-    # print('noise multiplier', noise_multiplier)
+        noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size,
+                                                    client_data_sizes)
+        #noise_multiplier = 3.029
+    print('noise multiplier', noise_multiplier)
 
     # >>> ***GEP
-    public_clients_loaders = clients_train_loaders[:num_public_clients]
-    public_clients_models = clients_models[:num_public_clients]
     history_gradient_per_layer = [None for _ in global_model.parameters()]
     # <<< ***GEP
 
-    pbar = trange(global_epoch)
-    for epoch in pbar:
-        to_eval = ((epoch + 1) > args.eval_after and (epoch + 1) % args.eval_every == 0) or (epoch + 1) == global_epoch
-
-        # >>>  ***GEP
-
-        # get public clients gradients for current global model state
-        public_clients_model_updates = []
-        for idx, (public_client_model, public_client_loader) in enumerate(
-                zip(public_clients_models, public_clients_loaders)):
-            public_client_model_backup = copy.deepcopy(public_client_model)
-            public_client_update = local_update(public_client_model, public_client_loader, global_model)
-            public_clients_model_updates.append(public_client_update)
-            clients_models[idx] = public_client_model_backup  # do not update public models during pca update
-
-        # compute basis for subspace spanned by public gradients
-        pca_per_layer = []
-        for i, p in enumerate(global_model.parameters()):
-            layer_updates = [public_client_update[i] for public_client_update in public_clients_model_updates]
-            flattened_layer_update = flatten_tensor(layer_updates)
-
-            # update gradient history
-            basis_gradients = history_gradient_per_layer[i]
-            basis_gradients = add_new_gradients_to_history(flattened_layer_update, basis_gradients,
-                                                           gradient_history_size)
-            history_gradient_per_layer[i] = basis_gradients
-
-            # compute new subspace basis
-            pca = compute_subspace(basis_gradients, num_basis_elements)
-            pca_per_layer.append(pca)
-
-        # <<< ***GEP
+    for epoch in trange(global_epoch):
 
         sampled_client_indices = random.sample(range(num_clients), max(1, int(user_sample_rate * num_clients)))
         sampled_clients_models = [clients_models[i] for i in sampled_client_indices]
@@ -259,21 +161,18 @@ def main():
         clients_accuracies = []
         for idx, (client_model, client_trainloader, client_testloader) in enumerate(
                 zip(sampled_clients_models, sampled_clients_train_loaders, sampled_clients_test_loaders)):
-            pbar.set_description(f'Epoch {epoch} Client in Iter {idx + 1} Client ID {sampled_client_indices[idx]} noise multiplier {noise_multiplier}')
-            client_update = local_update(client_model, client_trainloader, global_model)
+            if not args.store:
+                tqdm.write(f'client:{idx + 1}/{args.num_clients}')
+            local_model = local_update(client_model, client_trainloader)
+            client_update = [param.data - global_weight for param, global_weight in
+                             zip(client_model.parameters(), global_model.parameters())]
             clients_model_updates.append(client_update)
-            if to_eval:
-                accuracy = test(client_model, client_testloader)
-                clients_accuracies.append(accuracy)
-
-        if to_eval:
-            print(clients_accuracies)
-            acc = sum(clients_accuracies) / len(clients_accuracies)
-            wandb.log({'Accuracy': acc})
-            mean_acc_s.append(acc)
-            print(mean_acc_s)
-            acc_matrix.append(clients_accuracies)
-
+            accuracy = test(client_model, client_testloader)
+            clients_accuracies.append(accuracy)
+        print(clients_accuracies)
+        mean_acc_s.append(sum(clients_accuracies) / len(clients_accuracies))
+        print(mean_acc_s)
+        acc_matrix.append(clients_accuracies)
         sampled_client_data_sizes = [client_data_sizes[i] for i in sampled_client_indices]
         sampled_client_weights = [
             sampled_client_data_size / sum(sampled_client_data_sizes)
@@ -330,15 +229,18 @@ def main():
         with torch.no_grad():
             for global_param, update in zip(global_model.parameters(), aggregated_update):
                 global_param.add_(update)
+        for client_model in clients_models:
+            client_model.load_state_dict(global_model.state_dict())
     char_set = '1234567890abcdefghijklmnopqrstuvwxyz'
     ID = ''
     for ch in random.sample(char_set, 5):
         ID = f'{ID}{ch}'
+
     print(
         f'===============================================================\n'
         f'task_ID : '
         f'{ID}\n'
-        f'main_yxy\n'
+        f'main_base\n'
         f'noise_multiplier : {noise_multiplier}\n'
         f'mean accuracy : \n'
         f'{mean_acc_s}\n'
