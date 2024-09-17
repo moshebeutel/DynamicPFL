@@ -5,6 +5,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 from opacus import PrivacyEngine
+from emg_utils import get_dataloaders
 from options import parse_args
 from data import *
 from net import *
@@ -16,8 +17,7 @@ import sys
 import random
 from torch.optim import Optimizer
 import datetime
-
-
+import wandb
 
 
 args = parse_args()
@@ -185,16 +185,20 @@ def main():
 
         clients_models = [cifar10Net() for _ in range(num_clients)]
         global_model = cifar10Net()
-    elif dataset == 'FEMNIST':
-        clients_train_loaders, clients_test_loaders, client_data_sizes = get_FEMNIST(num_clients)
-
-        clients_models = [femnistNet() for _ in range(num_clients)]
-        global_model = femnistNet()
+    # elif dataset == 'FEMNIST':
+    #     clients_train_loaders, clients_test_loaders, client_data_sizes = get_FEMNIST(num_clients)
+    #
+    #     clients_models = [femnistNet() for _ in range(num_clients)]
+    #     global_model = femnistNet()
     elif dataset == 'SVHN':
         clients_train_loaders, clients_test_loaders, client_data_sizes = get_SVHN(args.dir_alpha, num_clients)
 
         clients_models = [SVHNNet() for _ in range(num_clients)]
         global_model = SVHNNet()
+    elif dataset == 'putEMG':
+        clients_train_loaders, clients_test_loaders, client_data_sizes = get_dataloaders()
+        clients_models = [EMGModel(num_features=24 * 8, num_classes=8, use_softmax=True) for _ in range(num_clients)]
+        global_model = EMGModel(num_features=24 * 8, num_classes=8, use_softmax=True)
     else:
         print('undifined dataset')
         assert 1==0
@@ -204,24 +208,35 @@ def main():
     if not args.no_noise:
         noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size, client_data_sizes)
         # noise_multiplier = 3.029
-    print('noise multiplier', noise_multiplier)
-    for epoch in trange(global_epoch):
+    # print('noise multiplier', noise_multiplier)
+    pbar = trange(global_epoch)
+    for epoch in pbar:
+        to_eval = ((epoch + 1) > args.eval_after and (epoch + 1) % args.eval_every == 0) or (epoch + 1) == global_epoch
+
         sampled_client_indices = random.sample(range(num_clients), max(1, int(user_sample_rate * num_clients)))
         sampled_clients_models = [clients_models[i] for i in sampled_client_indices]
         sampled_clients_train_loaders = [clients_train_loaders[i] for i in sampled_client_indices]
         sampled_clients_test_loaders = [clients_test_loaders[i] for i in sampled_client_indices]
         clients_model_updates = []
         clients_accuracies = []
-        for idx, (client_model, client_trainloader, client_testloader) in enumerate(zip(sampled_clients_models, sampled_clients_train_loaders, sampled_clients_test_loaders)):
-            if not args.store:
-                tqdm.write(f'client:{idx+1}/{args.num_clients}')
+        for idx, (client_model, client_trainloader, client_testloader) in (
+                enumerate(zip(sampled_clients_models, sampled_clients_train_loaders, sampled_clients_test_loaders))):
+            pbar.set_description(f'Epoch {epoch} Client in Iter {idx + 1} Client ID {sampled_client_indices[idx]} noise multiplier {noise_multiplier}')
             client_update = local_update(client_model, client_trainloader, global_model)
             clients_model_updates.append(client_update)
-            accuracy = test(client_model, client_testloader)
-            clients_accuracies.append(accuracy)
-        print(clients_accuracies)
-        mean_acc_s.append(sum(clients_accuracies)/len(clients_accuracies))
-        acc_matrix.append(clients_accuracies)
+            if to_eval:
+                accuracy = test(client_model, client_testloader)
+                clients_accuracies.append(accuracy)
+
+        if to_eval:
+            print(clients_accuracies)
+            acc = sum(clients_accuracies) / len(clients_accuracies)
+            best_acc = max(acc, best_acc)
+            wandb.log({'Accuracy': acc, 'Best Accuracy': best_acc})
+            mean_acc_s.append(acc)
+            print(mean_acc_s)
+            acc_matrix.append(clients_accuracies)
+
         sampled_client_data_sizes = [client_data_sizes[i] for i in sampled_client_indices]
         sampled_client_weights = [
             sampled_client_data_size / sum(sampled_client_data_sizes)

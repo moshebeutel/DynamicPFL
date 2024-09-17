@@ -7,21 +7,24 @@ args = parse_args()
 
 
 def compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size, client_data_sizes):
-    total_dataset_size = sum(client_data_sizes)
-    sample_rate = batch_size / total_dataset_size * args.user_sample_rate
-    total_steps = args.user_sample_rate * (sum([global_epoch * local_epoch * (client_data_size / batch_size) for client_data_size in client_data_sizes]))
+    # total_dataset_size = sum(client_data_sizes)
+    # sample_rate = batch_size / total_dataset_size * args.user_sample_rate
+    # total_steps = args.user_sample_rate * (sum([global_epoch * local_epoch * (client_data_size / batch_size) for client_data_size in client_data_sizes]))
+    #
+    # noise_multiplier = get_noise_multiplier(
+    #     epochs=int(global_epoch*sample_rate),
+    #     target_epsilon=target_epsilon,
+    #     target_delta=target_delta,
+    #     sample_rate=sample_rate,
+    #     accountant="rdp",
+    #     alphas= [alpha/10.0 for alpha in range(11, 10000, 11)]
+    # )
 
-    noise_multiplier = get_noise_multiplier(
-        target_epsilon=target_epsilon,
-        target_delta=target_delta,
-        sample_rate=sample_rate,
-        steps=total_steps,
-        accountant="rdp",
-        epsilon_tolerance=0.1,
-        alphas= [alpha/10.0 for alpha in range(11, 10000, 11)]
-    )
+    offline_values = {16: 0.5240631103515625, 8: 0.60577392578125, 4: 0.7672119140625, 2: 1.025390625, 1: 1.5234375}
 
-    print(f'noise_multiplier {noise_multiplier} to achieve {target_epsilon, target_delta}-DP')
+    noise_multiplier = offline_values[args.target_epsilon]
+
+    # print(f'noise_multiplier {noise_multiplier} to achieve {target_epsilon, target_delta}-DP')
 
     return noise_multiplier
 

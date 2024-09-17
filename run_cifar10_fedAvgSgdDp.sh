@@ -1,17 +1,17 @@
 #!/bin/bash
 
-N_CLIENTS=500
-SAMPLE_RATE=0.1
-EPOCHS=50
-LOCAL_EPOCHS=4
+N_CLIENTS=512
+SAMPLE_RATE=0.0312
+EPOCHS=5
+LOCAL_EPOCHS=2
 DATASET="CIFAR10"
 N_PUBLIC=10
 N_BASIS=5
 EPS=2
-DELTA=0.002
+DELTA=0.001953125
 PUBLIC_CLIENTS=10
 BASIS_SIZE=5
-HISTORY_SIZE=40
+HISTORY_SIZE=10
 LOG_FOLDER="logs/${DATASET}_${N_PUBLIC}_public_${BASIS_SIZE}_basis_${HISTORY_SIZE}_history"
 
 # Check if the folder exists
@@ -23,9 +23,8 @@ else
     # If the folder exists, output a message
     echo "Folder already exists at $LOG_FOLDER"
 fi
-
-ARGUMENTS=(--dataset ${DATASET} --num_clients ${N_CLIENTS} --user_sample_rate ${SAMPLE_RATE} --global_epoch ${EPOCHS} --local_epoch ${LOCAL_EPOCHS} --target_epsilon ${EPS} --target_delta ${DELTA})
-GEP_ARGUMENTS=(--num_public_clients ${PUBLIC_CLIENTS} --basis_size ${BASIS_SIZE} --history_size ${HISTORY_SIZE})
+ARGUMENTS=(--dataset "${DATASET}" --num_clients "${N_CLIENTS}" --user_sample_rate "${SAMPLE_RATE}" --global_epoch "${EPOCHS}" --local_epoch "${LOCAL_EPOCHS}" --target_epsilon "${EPS}" --target_delta "${DELTA}")
+GEP_ARGUMENTS=(--num_public_clients "${PUBLIC_CLIENTS}" --basis_size "${BASIS_SIZE}" --history_size "${HISTORY_SIZE}")
 
 echo ${DATASET} FedAvg SGD_DP
 python main_base.py "${ARGUMENTS[@]}"  >> ${LOG_FOLDER}/FedAvgSgdDP.txt
