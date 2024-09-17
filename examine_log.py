@@ -44,28 +44,30 @@ def read_log(log_folder: str|Path):
 
         arr = np.array(lnumbers)
 
-        plt.plot(arr, label=log_file_path.name);
+        plt.plot(arr, label=log_file_path.name.replace(".txt", ""));
 
-        df = pd.DataFrame({'dataset':'SVHN',
-                        'method':log_file_path.name,
-                        'mean':np.mean(arr),
-                        'std':np.std(arr),
-                        'median':np.median(arr),
+        df = pd.DataFrame({'dataset':'CIFAR10',
+                        'method':log_file_path.name.replace(".txt", ""),
+                        # 'mean':np.mean(arr),
+                        # 'std':np.std(arr),
+                        # 'median':np.median(arr),
                         'max':np.max(arr),
                         'best_iteration':np.argmax(arr),
-                        'min':np.min(arr)}, index=[i])
+                        # 'min':np.min(arr)
+                           }, index=[i])
         i+=1
 
         dfs.append(df)
     
     df=pd.concat(dfs, ignore_index=True)
     print(df)
-    plt.title(f'{log_folder.stem}');
+    df.to_csv(log_folder/f'{log_folder.name.replace("0.0", "0_0")}.csv')
+    plt.title(f'{log_folder.stem.replace("0.0", "0_0")}');
     plt.legend();
-    plt.savefig(f'plots/{log_folder.name}.png')
+    plt.savefig(f'plots/{log_folder.name.replace("0.0", "0_0")}.png')
 
 if __name__ == '__main__':
 
     # read_log(log_folder='logs/basline')
     # read_log(log_folder='logs/ours_gep_first')
-    read_log(log_folder='logs/svhn_8_epochs_eps_2')
+    read_log(log_folder='logs/CIFAR10_10_public_20_epochs_2_eps_0.02_sample_rate_sweep_basis_size')
