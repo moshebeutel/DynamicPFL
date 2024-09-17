@@ -19,7 +19,7 @@ fi
 GPU="$1"
 CLIPPING_BOUND="$2"
 #EPS="$3"
-SEED=42
+SEED="$3"
 EXP_NAME="${DATASET}"_no_noise_clip_"${CLIPPING_BOUND}"_seed_"${SEED}"
 
 
@@ -53,8 +53,8 @@ ARGUMENTS=(
       )
 echo "${ARGUMENTS[@]}"
 
-echo ${DATASET} FedAvg SGD_DP
-CUDA_VISIBLE_DEVICES=$GPU python main_base.py "${ARGUMENTS[@]}" >> "${LOG_FOLDER}"/FedAvgSgdDP_"${EXP_NAME}".txt
+echo ${DATASET} DynamicPFL SGD_DP
+CUDA_VISIBLE_DEVICES=$GPU python ours.py "${ARGUMENTS[@]}" >> "${LOG_FOLDER}"/DynamicPFL_"${EXP_NAME}".txt
 
 BASIS_SIZE=30
 HISTORY_SIZE=50
@@ -74,8 +74,8 @@ ARGUMENTS=(
        --exp-name "${EXP_NAME}"
        --no_noise
       )
-echo  ${DATASET} FedAvg GEP history size ${HISTORY_SIZE}
-CUDA_VISIBLE_DEVICES=$GPU python main_base_gep.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"  >> "${LOG_FOLDER}"/FedAvgGep_history_"${HISTORY_SIZE}"_"${EXP_NAME}".txt
+echo  ${DATASET} DynamicPFL GEP history size ${HISTORY_SIZE}
+CUDA_VISIBLE_DEVICES=$GPU python ours_gep.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"  >> "${LOG_FOLDER}"/DynamicPFLGep_history_"${HISTORY_SIZE}"_"${EXP_NAME}".txt
 
 #eps_values=(16 8 4 2)
 #seed_values=(42 43 45)

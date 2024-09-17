@@ -53,8 +53,8 @@ ARGUMENTS=(
       )
 echo "${ARGUMENTS[@]}"
 
-echo ${DATASET} FedAvg SGD_DP
-CUDA_VISIBLE_DEVICES=$GPU python main_base.py "${ARGUMENTS[@]}" >> "${LOG_FOLDER}"/FedAvgSgdDP_"${EXP_NAME}".txt
+#echo ${DATASET} FedAvg SGD_DP
+#CUDA_VISIBLE_DEVICES=$GPU python main_base.py "${ARGUMENTS[@]}" >> "${LOG_FOLDER}"/FedAvgSgdDP_"${EXP_NAME}".txt
 
 BASIS_SIZE=30
 HISTORY_SIZE=50

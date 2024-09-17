@@ -18,11 +18,9 @@ fi
 # Store the argument in a variable
 GPU="$1"
 CLIPPING_BOUND="$2"
-#EPS="$3"
+EPS="$3"
 SEED=42
-EXP_NAME="${DATASET}"_no_noise_clip_"${CLIPPING_BOUND}"_seed_"${SEED}"
-
-
+EXP_NAME="${DATASET}"_dynamic_epsilon_"${EPS}"_clip_"${CLIPPING_BOUND}"_seed_"${SEED}"
 # Print the argument
 echo "GPU $GPU CLIPPING_BOUND: $CLIPPING_BOUND  EPS $EPS"
 
@@ -44,38 +42,37 @@ ARGUMENTS=(
        --user_sample_rate "${SAMPLE_RATE}"
        --global_epoch "${EPOCHS}"
        --local_epoch "${LOCAL_EPOCHS}"
-#       --target_epsilon "${EPS}"
+       --target_epsilon "${EPS}"
        --target_delta "${DELTA}"
        --seed "${SEED}"
        --clipping_bound "${CLIPPING_BOUND}"
        --exp-name "${EXP_NAME}"
-       --no_noise
       )
 echo "${ARGUMENTS[@]}"
 
-echo ${DATASET} FedAvg SGD_DP
-CUDA_VISIBLE_DEVICES=$GPU python main_base.py "${ARGUMENTS[@]}" >> "${LOG_FOLDER}"/FedAvgSgdDP_"${EXP_NAME}".txt
+echo ${DATASET} DynamicPFL
+CUDA_VISIBLE_DEVICES=$GPU python ours.py "${ARGUMENTS[@]}" >> "${LOG_FOLDER}"/DynamicPFL_"${EXP_NAME}".txt
 
 BASIS_SIZE=30
 HISTORY_SIZE=50
 GEP_ARGUMENTS=(--num_public_clients "${PUBLIC_CLIENTS}" --basis_size "${BASIS_SIZE}" --history_size "${HISTORY_SIZE}")
 EXP_NAME=GEP_"${EXP_NAME}"
-
 ARGUMENTS=(
        --dataset "${DATASET}"
        --num_clients "${N_CLIENTS}"
        --user_sample_rate "${SAMPLE_RATE}"
        --global_epoch "${EPOCHS}"
        --local_epoch "${LOCAL_EPOCHS}"
-#       --target_epsilon "${EPS}"
+       --target_epsilon "${EPS}"
        --target_delta "${DELTA}"
        --seed "${SEED}"
        --clipping_bound "${CLIPPING_BOUND}"
        --exp-name "${EXP_NAME}"
-       --no_noise
       )
-echo  ${DATASET} FedAvg GEP history size ${HISTORY_SIZE}
-CUDA_VISIBLE_DEVICES=$GPU python main_base_gep.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"  >> "${LOG_FOLDER}"/FedAvgGep_history_"${HISTORY_SIZE}"_"${EXP_NAME}".txt
+echo "${ARGUMENTS[@]}"
+
+echo  ${DATASET} DynamicPFL GEP history size ${HISTORY_SIZE}
+CUDA_VISIBLE_DEVICES=$GPU python ours_gep.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"  >> "${LOG_FOLDER}"/DynamicPFL_history_"${HISTORY_SIZE}"_"${EXP_NAME}".txt
 
 #eps_values=(16 8 4 2)
 #seed_values=(42 43 45)

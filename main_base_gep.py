@@ -105,6 +105,7 @@ def test(client_model, client_testloader):
 
 
 def main():
+    best_acc = 0.0
     mean_acc_s = []
     acc_matrix = []
     if dataset == 'MNIST':
