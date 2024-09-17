@@ -1,24 +1,14 @@
 import os
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torchvision import datasets, transforms
-from torch.utils.data import DataLoader, Subset
-from opacus import PrivacyEngine
-from emg_utils import get_dataloaders
-from options import parse_args
-from data import *
-from net import *
-from tqdm import tqdm
-from utils import compute_noise_multiplier, compute_fisher_diag
-from tqdm.auto import trange, tqdm
-import copy
-import sys
 import random
-from torch.optim import Optimizer
-import datetime
+import sys
+import torch.optim as optim
 import wandb
-
+from tqdm.auto import trange
+from data import *
+from emg_utils import get_dataloaders
+from net import *
+from options import parse_args
+from utils import compute_noise_multiplier, compute_fisher_diag
 
 args = parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
@@ -181,7 +171,7 @@ def main():
         clients_models = [mnistNet() for _ in range(num_clients)]
         global_model = mnistNet()
     elif dataset == 'CIFAR10':
-        clients_train_loaders, clients_test_loaders, client_data_sizes = get_CIFAR10(args.dir_alpha, num_clients)
+        clients_train_loaders, clients_test_loaders, client_data_sizes = get_CIFAR10(args.dir_alpha, num_clients, args.batch_size)
 
         clients_models = [cifar10Net() for _ in range(num_clients)]
         global_model = cifar10Net()
@@ -191,7 +181,7 @@ def main():
     #     clients_models = [femnistNet() for _ in range(num_clients)]
     #     global_model = femnistNet()
     elif dataset == 'SVHN':
-        clients_train_loaders, clients_test_loaders, client_data_sizes = get_SVHN(args.dir_alpha, num_clients)
+        clients_train_loaders, clients_test_loaders, client_data_sizes = get_SVHN(args.dir_alpha, num_clients, args.batch_size)
 
         clients_models = [SVHNNet() for _ in range(num_clients)]
         global_model = SVHNNet()

@@ -20,6 +20,8 @@ GPU="$1"
 CLIPPING_BOUND="$2"
 #EPS="$3"
 SEED=42
+EXP_NAME=GP_"${DATASET}"_no_noise_clip_"${CLIPPING_BOUND}"_seed_"${SEED}"
+
 # Print the argument
 echo "GPU $GPU CLIPPING_BOUND: $CLIPPING_BOUND  EPS $EPS"
 
@@ -45,19 +47,36 @@ ARGUMENTS=(
        --target_delta "${DELTA}"
        --seed "${SEED}"
        --clipping_bound "${CLIPPING_BOUND}"
+       --exp-name "${EXP_NAME}"
        --no_noise
       )
 echo "${ARGUMENTS[@]}"
 
-echo ${DATASET} FedAvg SGD_DP
-CUDA_VISIBLE_DEVICES=$GPU python main_base.py "${ARGUMENTS[@]}" >> "${LOG_FOLDER}"/FedAvgSgdDP_eps_inf_seed_"${SEED}"_clip_"${CLIPPING_BOUND}".txt
+echo ${DATASET} FedAvg SGD_DP + GP
+CUDA_VISIBLE_DEVICES=$GPU python main_base_gp.py "${ARGUMENTS[@]}" >> "${LOG_FOLDER}"/FedAvgSgdDP_GP_eps_inf_seed_"${SEED}"_clip_"${CLIPPING_BOUND}".txt
 
 BASIS_SIZE=30
 HISTORY_SIZE=50
 GEP_ARGUMENTS=(--num_public_clients "${PUBLIC_CLIENTS}" --basis_size "${BASIS_SIZE}" --history_size "${HISTORY_SIZE}")
+EXP_NAME=GEP_"${EXP_NAME}"
 
-echo  ${DATASET} FedAvg GEP history size ${HISTORY_SIZE}
-CUDA_VISIBLE_DEVICES=$GPU python main_base_gep.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"  >> "${LOG_FOLDER}"/FedAvgGep_history_"${HISTORY_SIZE}"_eps_inf_seed_"${SEED}"_clip_"${CLIPPING_BOUND}".txt
+ARGUMENTS=(
+       --dataset "${DATASET}"
+       --num_clients "${N_CLIENTS}"
+       --user_sample_rate "${SAMPLE_RATE}"
+       --global_epoch "${EPOCHS}"
+       --local_epoch "${LOCAL_EPOCHS}"
+#       --target_epsilon "${EPS}"
+       --target_delta "${DELTA}"
+       --seed "${SEED}"
+       --clipping_bound "${CLIPPING_BOUND}"
+       --exp-name "${EXP_NAME}"
+      )
+echo "${ARGUMENTS[@]}"
+
+
+echo  ${DATASET} FedAvg GEP + GP history size ${HISTORY_SIZE}
+CUDA_VISIBLE_DEVICES=$GPU python main_base_gep_gp.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"  >> "${LOG_FOLDER}"/FedAvgGep_GP_history_"${HISTORY_SIZE}"_eps_inf_seed_"${SEED}"_clip_"${CLIPPING_BOUND}".txt
 
 #eps_values=(16 8 4 2)
 #seed_values=(42 43 45)

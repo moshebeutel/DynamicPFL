@@ -1,19 +1,10 @@
-import torch
-import os
-import pickle
-from torchvision import datasets, transforms
-from torch.utils.data import DataLoader, Subset, Dataset, SubsetRandomSampler
-import numpy as np
 from typing import Tuple, List
-from options import parse_args
-import random
-from collections import Counter
-
-args = parse_args()
+from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset, SubsetRandomSampler
 
 
 #SVHN------------------------------------------------------------
-def get_SVHN(alpha: float, num_clients: int) -> Tuple[List[DataLoader], List[DataLoader], List[int]]:
+def get_SVHN(alpha: float, num_clients: int, batch_size:int) -> Tuple[List[DataLoader], List[DataLoader], List[int]]:
     transform = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.ToTensor(),
@@ -38,7 +29,7 @@ def get_SVHN(alpha: float, num_clients: int) -> Tuple[List[DataLoader], List[Dat
     for i in range(num_clients):
         train_sampler = SubsetRandomSampler(train_partition[i])
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=train_sampler, drop_last=True)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, drop_last=True)
 
         train_loaders.append(train_loader)
         test_loaders.append(shared_test_loader)
@@ -87,7 +78,7 @@ def get_clients_datasets(train_dataset, num_clients):
 from fedlab.utils.dataset.functional import hetero_dir_partition
 
 
-def get_CIFAR10(alpha: float, num_clients: int) -> Tuple[List[DataLoader], List[DataLoader], List[int]]:
+def get_CIFAR10(alpha: float, num_clients: int, batch_size: int) -> Tuple[List[DataLoader], List[DataLoader], List[int]]:
     transform = transforms.Compose([
         transforms.RandomHorizontalFlip(),
         transforms.RandomCrop(32, padding=4),
@@ -112,7 +103,7 @@ def get_CIFAR10(alpha: float, num_clients: int) -> Tuple[List[DataLoader], List[
     for i in range(num_clients):
         train_sampler = torch.utils.data.SubsetRandomSampler(train_partition[i])
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=train_sampler, drop_last=True)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, drop_last=True)
 
         train_loaders.append(train_loader)
         test_loaders.append(shared_test_loader)
@@ -132,12 +123,10 @@ def get_CIFAR10(alpha: float, num_clients: int) -> Tuple[List[DataLoader], List[
 
 
 from typing import List, Tuple
-import numpy as np
-import torch
 from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
 
-def get_iid_cifar10(num_clients: int) -> Tuple[List[DataLoader], List[DataLoader], List[int]]:
+
+def get_iid_cifar10(num_clients: int, batch_size: int) -> Tuple[List[DataLoader], List[DataLoader], List[int]]:
     transform = transforms.Compose([
         transforms.RandomHorizontalFlip(),
         transforms.RandomCrop(32, padding=4),
@@ -198,7 +187,7 @@ def get_iid_cifar10(num_clients: int) -> Tuple[List[DataLoader], List[DataLoader
         test_subset = torch.utils.data.Subset(test_dataset, test_partitions[i])
 
         # Create data loaders using the sub-datasets and shuffle=True.
-        train_loader = DataLoader(train_subset, batch_size=50, shuffle=True)
+        train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
         test_loader = DataLoader(test_subset, batch_size=256, shuffle=True)
 
         train_loaders.append(train_loader)
@@ -219,7 +208,7 @@ def get_iid_cifar10(num_clients: int) -> Tuple[List[DataLoader], List[DataLoader
 # from torch.utils.data import DataLoader, Dataset
 #
 # class TFDatasetToTorch(Dataset):
-#     def __init__(self, data, transform=None):
+#     def __init__(self, data, batch_size, transform=None):
 #         self.transform = transform
 #         self.data = []
 #         for image, label in data:
@@ -290,7 +279,7 @@ def get_iid_cifar10(num_clients: int) -> Tuple[List[DataLoader], List[DataLoader
 #     for subset in trainSetList:
 #         train_loader = DataLoader(
 #             subset,
-#             batch_size=args.batch_size,
+#             batch_size=batch_size,
 #             num_workers=4,
 #             pin_memory=True,
 #             shuffle=True
@@ -302,7 +291,7 @@ def get_iid_cifar10(num_clients: int) -> Tuple[List[DataLoader], List[DataLoader
 #     for subset in testSetList:
 #         test_loader = DataLoader(
 #             subset,
-#             batch_size=args.batch_size,
+#             batch_size=batch_size,
 #             num_workers=4,
 #             pin_memory=True,
 #             shuffle=True

@@ -1,24 +1,16 @@
-import logging
 import os
-import torch
-import torch.nn as nn
+import random
+import sys
 import torch.optim as optim
-from torchvision import datasets, transforms
-from torch.utils.data import DataLoader, Subset
-from emg_utils import get_dataloaders, get_user_list
-from gp_utils import build_tree
-# from opacus import PrivacyEngine
-from options import parse_args
+import wandb
+from tqdm.auto import trange
 from data import *
+from emg_utils import get_dataloaders
+from gp_utils import build_tree
 from net import *
-from tqdm import tqdm
-
+from options import parse_args
 from pFedGP.pFedGP.Learner import pFedGPFullLearner
 from utils import compute_noise_multiplier
-from tqdm.auto import trange
-import copy
-import sys
-import random
 
 args = parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
@@ -127,9 +119,7 @@ def test(client_model, client_testloader, client_trainloader, cid, GPs):
 
 
 def main():
-    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        level=logging.WARN
-                        )
+    best_acc = 0.0
     mean_acc_s = []
     acc_matrix = []
     classes_per_client = 0
@@ -144,7 +134,7 @@ def main():
         global_model = mnistNet()
         classes_per_client = 10
     elif dataset == 'CIFAR10':
-        clients_train_loaders, clients_test_loaders, client_data_sizes = get_CIFAR10(args.dir_alpha, num_clients)
+        clients_train_loaders, clients_test_loaders, client_data_sizes = get_CIFAR10(args.dir_alpha, num_clients, args.batch_size)
         clients_models = [cifar10NetGPkernel() for _ in range(num_clients)]
         global_model = cifar10NetGPkernel()
         classes_per_client = 10
@@ -153,7 +143,7 @@ def main():
     #     clients_models = [femnistNet() for _ in range(num_clients)]
     #     global_model = femnistNet()
     elif dataset == 'SVHN':
-        clients_train_loaders, clients_test_loaders, client_data_sizes = get_SVHN(args.dir_alpha, num_clients)
+        clients_train_loaders, clients_test_loaders, client_data_sizes = get_SVHN(args.dir_alpha, num_clients, args.batch_size)
         clients_models = [SVHNNet() for _ in range(num_clients)]
         global_model = SVHNNet()
         classes_per_client = 62
@@ -181,6 +171,7 @@ def main():
 
     pbar = trange(global_epoch)
     for epoch in pbar:
+        to_eval = ((epoch + 1) > args.eval_after and (epoch + 1) % args.eval_every == 0) or (epoch + 1) == global_epoch
         sampled_client_indices = random.sample(range(num_clients), max(1, int(user_sample_rate * num_clients)))
         sampled_clients_models = [clients_models[i] for i in sampled_client_indices]
         sampled_clients_train_loaders = [clients_train_loaders[i] for i in sampled_client_indices]
@@ -192,19 +183,25 @@ def main():
                 zip(sampled_clients_models, sampled_clients_train_loaders, sampled_clients_test_loaders,
                     sampled_client_indices)):
 
-            pbar.set_description(f'Epoch {epoch} Client in Iter {idx + 1} Client ID {sampled_client_indices[idx]}')
+            pbar.set_description(f'Epoch {epoch} Client in Iter {idx + 1} Client ID {sampled_client_indices[idx]} noise multiplier {noise_multiplier}')
 
             local_model, GPs[cid] = local_update(client_model, client_trainloader, cid, GPs)
             client_update = [param.data - global_weight for param, global_weight in
                              zip(client_model.parameters(), global_model.parameters())]
             clients_model_updates.append(client_update)
-            accuracy = test(client_model, client_testloader, client_trainloader, cid, GPs)
-            clients_accuracies.append(accuracy)
+            if to_eval:
+                accuracy = test(client_model, client_testloader, client_trainloader, cid, GPs)
+                clients_accuracies.append(accuracy)
 
-        print(clients_accuracies)
-        mean_acc_s.append(sum(clients_accuracies) / len(clients_accuracies))
-        print(mean_acc_s)
-        acc_matrix.append(clients_accuracies)
+        if to_eval:
+            print(clients_accuracies)
+            acc = sum(clients_accuracies) / len(clients_accuracies)
+            best_acc = max(acc, best_acc)
+            wandb.log({'Accuracy': acc, 'Best Accuracy': best_acc})
+            mean_acc_s.append(acc)
+            print(mean_acc_s)
+            acc_matrix.append(clients_accuracies)
+
         sampled_client_data_sizes = [client_data_sizes[i] for i in sampled_client_indices]
         sampled_client_weights = [
             sampled_client_data_size / sum(sampled_client_data_sizes)

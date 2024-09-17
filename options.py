@@ -78,7 +78,6 @@ def parse_args():
     #############################
     #       GP args             #
     #############################
-    parser.add_argument("--eval-every", type=int, default=1, help="eval every X selected epochs")
 
     parser.add_argument('--use-gp', type=str2bool, default=True, help="use gaussian process as "
                                                                        "personalization mechanism")
@@ -102,7 +101,7 @@ def parse_args():
     parser.add_argument('--outputscale-increase', type=str, default='constant',
                         choices=['constant', 'increase', 'decrease'],
                         help='output scale increase/decrease/constant along tree')
-    parser.add_argument("--seed", type=int, default=42, help="seed value")
+
 
 
     args = parser.parse_args()

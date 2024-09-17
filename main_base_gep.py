@@ -105,6 +105,7 @@ def test(client_model, client_testloader):
 
 
 def main():
+    best_acc = 0.0
     mean_acc_s = []
     acc_matrix = []
     if dataset == 'MNIST':
@@ -117,7 +118,7 @@ def main():
         clients_models = [mnistNet() for _ in range(num_clients)]
         global_model = mnistNet()
     elif dataset == 'CIFAR10':
-        clients_train_loaders, clients_test_loaders, client_data_sizes = get_CIFAR10(args.dir_alpha, num_clients)
+        clients_train_loaders, clients_test_loaders, client_data_sizes = get_CIFAR10(args.dir_alpha, num_clients, args.batch_size)
         clients_models = [cifar10Net() for _ in range(num_clients)]
         global_model = cifar10Net()
     # elif dataset == 'FEMNIST':
@@ -125,7 +126,7 @@ def main():
     #     clients_models = [femnistNet() for _ in range(num_clients)]
     #     global_model = femnistNet()
     elif dataset == 'SVHN':
-        clients_train_loaders, clients_test_loaders, client_data_sizes = get_SVHN(args.dir_alpha, num_clients)
+        clients_train_loaders, clients_test_loaders, client_data_sizes = get_SVHN(args.dir_alpha, num_clients, args.batch_size)
         clients_models = [SVHNNet() for _ in range(num_clients)]
         global_model = SVHNNet()
     elif dataset == 'putEMG':
@@ -216,7 +217,6 @@ def main():
             print(mean_acc_s)
             acc_matrix.append(clients_accuracies)
 
-        acc_matrix.append(clients_accuracies)
         sampled_client_data_sizes = [client_data_sizes[i] for i in sampled_client_indices]
         sampled_client_weights = [
             sampled_client_data_size / sum(sampled_client_data_sizes)
