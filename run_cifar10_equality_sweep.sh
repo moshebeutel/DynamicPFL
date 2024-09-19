@@ -2,7 +2,7 @@
 
 N_CLIENTS=512
 SAMPLE_RATE=0.015625  # Sample and aggregate 8 clients each iteration
-EPOCHS=128            # 1000 iterations of 8 sampled clients
+EPOCHS=960            # 1000 iterations of 8 sampled clients
 LOCAL_EPOCHS=4        # Each client iterate 4 times over all his local data
 DATASET="CIFAR10"
 DELTA=0.001953125     # 1/512
@@ -35,7 +35,7 @@ else
     echo "Folder already exists at $LOG_FOLDER"
 fi
 
-noise_multiplers=(0.85 0.9 0.95 1.0)
+noise_multiplers=(1.7 1.8 1.9 2.0)
 for np in "${noise_multiplers[@]}"; do
 
   EXP_NAME="${DATASET}"_noise_multipler_"${np}"_clip_"${CLIPPING_BOUND}"_seed_"${SEED}"
