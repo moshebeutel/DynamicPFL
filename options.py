@@ -41,6 +41,8 @@ def parse_args():
 
     parser.add_argument('--user_sample_rate', type=float, default=8/512, help="Sample rate for user sampling")
 
+    parser.add_argument('--noise_multiplier', type=float, default=0.0,
+                        help="If not zero, use this factor instead of epsilon accountant ")
     parser.add_argument('--target_epsilon', type=float, default=1, help="Target privacy budget epsilon")
     parser.add_argument('--target_delta', type=float, default=1/512, help="Target privacy budget delta")
     parser.add_argument('--clipping_bound', type=float, default=0.1, help="Gradient clipping bound")
