@@ -64,7 +64,7 @@ class cifar10NetGPkernel(nn.Module):
         x = self.pool(F.relu(self.conv3(x)))
         x = x.view(-1, 32 * 4 * 4)
         x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
+        x = self.fc2(x)
 
         return x
 
