@@ -35,7 +35,7 @@ else
     echo "Folder already exists at $LOG_FOLDER"
 fi
 
-noise_multiplers=(0.85 0.0.9 0.95 1.0)
+noise_multiplers=(0.85 0.9 0.95 1.0)
 for np in "${noise_multiplers[@]}"; do
 
   EXP_NAME="${DATASET}"_noise_multipler_"${np}"_clip_"${CLIPPING_BOUND}"_seed_"${SEED}"
