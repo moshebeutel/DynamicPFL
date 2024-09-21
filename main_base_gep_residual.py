@@ -37,6 +37,7 @@ batch_size = args.batch_size
 target_epsilon = args.target_epsilon
 target_delta = args.target_delta
 clipping_bound = args.clipping_bound
+clipping_bound_residual = args.clipping_bound_residual
 dataset = args.dataset
 user_sample_rate = args.user_sample_rate
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -143,10 +144,14 @@ def main():
         client_model.to(device)
 
     noise_multiplier = 0
+    noise_multiplier_residual = 0
+
     if not args.no_noise:
         noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size,
                                                     client_data_sizes) if args.noise_multiplier == 0 else args.noise_multiplier
-        #noise_multiplier = 3.029
+
+        noise_multiplier_residual = noise_multiplier if args.noise_multiplier_residual == 0 else args.noise_multiplier_residual
+        # noise_multiplier = 3.029
     # print('noise multiplier', noise_multiplier)
 
     # >>> ***GEP
@@ -199,7 +204,9 @@ def main():
         clients_accuracies = []
         for idx, (client_model, client_trainloader, client_testloader) in enumerate(
                 zip(sampled_clients_models, sampled_clients_train_loaders, sampled_clients_test_loaders)):
-            pbar.set_description(f'Epoch {epoch} Client in Iter {idx + 1} Client ID {sampled_client_indices[idx]} noise multiplier {noise_multiplier}')
+            pbar.set_description(f'Epoch {epoch} Client in Iter {idx + 1} Client ID {sampled_client_indices[idx]} '
+                                 f'clips {clipping_bound}, {clipping_bound_residual} '
+                                 f'noise multipliers {noise_multiplier}, {noise_multiplier_residual}')
             local_model = local_update(client_model, client_trainloader)
             client_update = [param.data - global_weight for param, global_weight in
                              zip(client_model.parameters(), global_model.parameters())]
@@ -265,14 +272,14 @@ def main():
         for idx, residual_client_update in enumerate(residual_clients_model_updates):
             if not args.no_clip:
                 norm = torch.sqrt(sum([torch.sum(param ** 2) for param in residual_client_update]))
-                clip_rate = max(1, (norm / clipping_bound))
+                clip_rate = max(1, (norm / clipping_bound_residual))
                 residual_clipped_update = [(param / clip_rate) for param in residual_client_update]
             else:
                 residual_clipped_update = residual_client_update
             residual_clipped_updates.append(residual_clipped_update)
         residual_noisy_updates = []
         for residual_clipped_update in residual_clipped_updates:
-            noise_stddev = torch.sqrt(torch.tensor((clipping_bound ** 2) * (noise_multiplier ** 2) / num_clients))
+            noise_stddev = torch.sqrt(torch.tensor((clipping_bound_residual ** 2) * (noise_multiplier_residual ** 2) / num_clients))
             noise = [torch.randn_like(param) * noise_stddev for param in residual_clipped_update]
             noisy_update = [clipped_param + noise_param for clipped_param, noise_param in zip(residual_clipped_update, noise)]
             residual_noisy_updates.append(noisy_update)
@@ -287,11 +294,19 @@ def main():
                           zip(client_update, pca_per_layer, global_model.parameters())]
                          for client_update in noisy_updates]
 
-        # >>> GEP RESIDUAL
-        noisy_updates = [[project_back_embedding(layer_update, pca, device).reshape(param.shape)
-                          for (layer_update, pca, param) in
-                          zip(client_update, pca_per_layer, global_model.parameters())]
-                         for client_update in noisy_updates]
+        # >>> GEP RESIDUAL`
+        residual_aggregated_update = [
+            torch.sum(
+                torch.stack(
+                    [
+                        residual_noisy_update[param_index] * sampled_client_weights[idx]
+                        for idx, residual_noisy_update in enumerate(residual_noisy_updates)
+                    ]
+                ),
+                dim=0,
+            ).reshape(param.shape)
+            for param, param_index in zip(global_model.parameters(), range(len(residual_noisy_updates[0])))
+        ]
         # <<< GEP RESIDUAL
         # <<<< ***GEP
 
@@ -307,6 +322,14 @@ def main():
             )
             for param_index in range(len(noisy_updates[0]))
         ]
+
+        # >>> ***GEP
+        # >>>> GEP RESIDUAL
+        aggregated_update = [grad_update + residual_update
+                             for grad_update, residual_update in zip(aggregated_update, residual_aggregated_update)]
+        # <<<< GEP RESIDUAL
+        # <<< ***GEP
+
         with torch.no_grad():
             for global_param, update in zip(global_model.parameters(), aggregated_update):
                 global_param.add_(update)

@@ -18,6 +18,7 @@ fi
 # Store the argument in a variable
 GPU="$1"
 CLIPPING_BOUND="$2"
+CLIPPING_BOUND_RESIDUAL="$3"
 SEED=42
 
 # Print the argument
@@ -35,10 +36,10 @@ else
     echo "Folder already exists at $LOG_FOLDER"
 fi
 
-noise_multipliers=(3.0 3.1 3.2 3.3)
+noise_multipliers=(0.0 1.0 2.0 3.0)
 for np in "${noise_multipliers[@]}"; do
 
-  EXP_NAME="${DATASET}"_noise_multipler_"${np}"_clip_"${CLIPPING_BOUND}"_seed_"${SEED}"
+  EXP_NAME="${DATASET}"_noise_multipler_"${np}"_clip_"${CLIPPING_BOUND}"_clip_res_"${CLIPPING_BOUND_RESIDUAL}"_seed_"${SEED}"
   ARGUMENTS=(
          --dataset "${DATASET}"
          --num_clients "${N_CLIENTS}"
@@ -49,18 +50,19 @@ for np in "${noise_multipliers[@]}"; do
          --target_delta "${DELTA}"
          --seed "${SEED}"
          --clipping_bound "${CLIPPING_BOUND}"
+         --clipping_bound_residual "${CLIPPING_BOUND_RESIDUAL}"
          --noise_multiplier "${np}"
          --exp-name "${EXP_NAME}"
         )
   echo "${ARGUMENTS[@]}"
 
-  echo Run FedAvg SGD_DP with arguments "${ARGUMENTS[@]}"
-  CUDA_VISIBLE_DEVICES=$GPU python main_base.py "${ARGUMENTS[@]}" >> "${LOG_FOLDER}"/FedAvgSgdDP_"${EXP_NAME}".txt
+#  echo Run FedAvg SGD_DP with arguments "${ARGUMENTS[@]}"
+#  CUDA_VISIBLE_DEVICES=$GPU python main_base.py "${ARGUMENTS[@]}" >> "${LOG_FOLDER}"/FedAvgSgdDP_"${EXP_NAME}".txt
 
   BASIS_SIZE=10
   HISTORY_SIZE=10
   GEP_ARGUMENTS=(--num_public_clients "${PUBLIC_CLIENTS}" --basis_size "${BASIS_SIZE}" --history_size "${HISTORY_SIZE}")
-  EXP_NAME=GEP_"${EXP_NAME}"
+  EXP_NAME=GEP_RES_"${EXP_NAME}"
 
   ARGUMENTS=(
          --dataset "${DATASET}"
@@ -72,14 +74,15 @@ for np in "${noise_multipliers[@]}"; do
          --target_delta "${DELTA}"
          --seed "${SEED}"
          --clipping_bound "${CLIPPING_BOUND}"
+         --clipping_bound_residual "${CLIPPING_BOUND_RESIDUAL}"
          --noise_multiplier "${np}"
          --exp-name "${EXP_NAME}"
         )
-#  echo "${ARGUMENTS[@]}"
-#
-#
-#  echo  ${DATASET} FedAvg GEP with arguments "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"
-#  CUDA_VISIBLE_DEVICES=$GPU python main_base_gep.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"  >> "${LOG_FOLDER}"/FedAvgGep_"${EXP_NAME}".txt
+  echo "${ARGUMENTS[@]}"
+
+
+  echo  ${DATASET} FedAvg GEP RESIDUAL  with arguments "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"
+  CUDA_VISIBLE_DEVICES=$GPU python main_base_gep_residual.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"  >> "${LOG_FOLDER}"/FedAvgGep_"${EXP_NAME}".txt
 done
 
 

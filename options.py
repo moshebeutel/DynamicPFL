@@ -43,9 +43,13 @@ def parse_args():
 
     parser.add_argument('--noise_multiplier', type=float, default=0.0,
                         help="If not zero, use this factor instead of epsilon accountant ")
+    parser.add_argument('--noise_multiplier_residual', type=float, default=0.0,
+                        help="If not zero, use this factor instead of epsilon accountant for residual")
+
     parser.add_argument('--target_epsilon', type=float, default=1, help="Target privacy budget epsilon")
     parser.add_argument('--target_delta', type=float, default=1/512, help="Target privacy budget delta")
     parser.add_argument('--clipping_bound', type=float, default=0.1, help="Gradient clipping bound")
+    parser.add_argument('--clipping_bound_residual', type=float, default=0.1, help="Residual clipping bound")
 
     parser.add_argument('--fisher_threshold', type=float, default=0.4, help="Fisher information threshold for parameter selection")
     parser.add_argument('--lambda_1', type=float, default=0.1, help="Lambda value for EWC regularization term")
