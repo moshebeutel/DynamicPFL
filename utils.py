@@ -1,5 +1,5 @@
 import torch
-from opacus.accountants.utils import get_noise_multiplier
+# from opacus.accountants.utils import get_noise_multiplier
 from options import parse_args
 from torch import autograd
 
@@ -20,7 +20,7 @@ def compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_e
     #     alphas= [alpha/10.0 for alpha in range(11, 10000, 11)]
     # )
 
-    offline_values = {16: 0.5240631103515625, 8: 0.60577392578125, 4: 0.7672119140625, 2: 1.025390625, 1: 1.5234375}
+    offline_values = {16: 0.5240631103515625, 8: 0.60577392578125, 4: 0.7672119140625, 2: 1.025390625, 1: 1.5234375, 0.1: 9.375}
 
     noise_multiplier = offline_values[args.target_epsilon]
 

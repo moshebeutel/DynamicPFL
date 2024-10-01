@@ -1,6 +1,65 @@
+from pathlib import Path
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        nn.init.xavier_uniform_(m.weight)
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
+    elif isinstance(m, nn.Conv2d):
+        nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
+
+def load_checkpoint(path: Path,
+                    model: nn.Module,
+                    # optimizer: torch.optim.Optimizer,
+                    device: torch.device = torch.device('cpu')):
+    assert path.is_file(), f'{path} is not a file'
+    assert path.suffix in ['.pt', '.pth'], f'Expected suffix pt or pth, got {path.suffix}'
+    assert path.exists(), f'{path} does not exist'
+
+    checkpoint = torch.load(path.as_posix(), map_location=device)
+
+    # Restore the model and optimizer states
+    model.load_state_dict(checkpoint['model_state_dict'])
+    # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    # Restore other information
+    epoch = checkpoint['epoch']
+    loss = checkpoint['loss']
+    acc = checkpoint['acc']
+    best_acc = checkpoint['best_acc']
+    return model, epoch, loss, acc, best_acc
+    # return model, optimizer, epoch, loss, acc, best_acc
+
+
+def save_checkpoint(path: Path, model: nn.Module, epoch: int,
+                    # optimizer: Optional[torch.optim.Optimizer],
+                    acc: float, loss: float, best_acc: float) -> None:
+    # assert path.parent.exists(), f'{path.parent} does not exist'
+    if not path.parent.exists():
+        path.parent.mkdir(parents=True)
+        print(f'Created {path}')
+    assert path.suffix in ['.pt', '.pth'], f'Expected suffix pt or pth, got {path.suffix}'
+
+    if path.exists():
+        # This should be very rare. There are floats in file name
+        path = path.parent / (path.stem + '_' + path.suffix)
+
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        # 'optimizer_state_dict': optimizer.state_dict() if optimizer is not None else None,
+        'loss': loss,
+        'acc': acc,
+        'best_acc': best_acc
+    }
+    torch.save(checkpoint, path.as_posix())
 
 
 class mnistNet(nn.Module):
@@ -37,6 +96,8 @@ class cifar10Net(nn.Module):
         self.fc1 = nn.Linear(32 * 4 * 4, 32 * 4 * 4)
         self.fc2 = nn.Linear(32 * 4 * 4, 32 * 2 * 2)
         self.fc3 = nn.Linear(32 * 2 * 2, 10)
+
+        init_weights(self)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))

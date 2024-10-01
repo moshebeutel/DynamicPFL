@@ -82,10 +82,62 @@ def get_clients_datasets(train_dataset, num_clients):
 
     return clients_datasets
 
+def hetero_dir_partition(targets, num_clients, num_classes, dir_alpha, min_require_size=None):
+    """
 
+    Non-iid partition based on Dirichlet distribution. The method is from "hetero-dir" partition of
+    `Bayesian Nonparametric Federated Learning of Neural Networks <https://arxiv.org/abs/1905.12022>`_
+    and `Federated Learning with Matched Averaging <https://arxiv.org/abs/2002.06440>`_.
 
-from fedlab.utils.dataset.functional import hetero_dir_partition
+    This method simulates heterogeneous partition for which number of data points and class
+    proportions are unbalanced. Samples will be partitioned into :math:`J` clients by sampling
+    :math:`p_k \sim \\text{Dir}_{J}({\\alpha})` and allocating a :math:`p_{p,j}` proportion of the
+    samples of class :math:`k` to local client :math:`j`.
 
+    Sample number for each client is decided in this function.
+
+    Args:
+        targets (list or numpy.ndarray): Sample targets. Unshuffled preferred.
+        num_clients (int): Number of clients for partition.
+        num_classes (int): Number of classes in samples.
+        dir_alpha (float): Parameter alpha for Dirichlet distribution.
+        min_require_size (int, optional): Minimum required sample number for each client. If set to ``None``, then equals to ``num_classes``.
+
+    Returns:
+        dict: ``{ client_id: indices}``.
+    """
+    if min_require_size is None:
+        min_require_size = num_classes
+
+    if not isinstance(targets, np.ndarray):
+        targets = np.array(targets)
+    num_samples = targets.shape[0]
+
+    min_size = 0
+    while min_size < min_require_size:
+        idx_batch = [[] for _ in range(num_clients)]
+        # for each class in the dataset
+        for k in range(num_classes):
+            idx_k = np.where(targets == k)[0]
+            np.random.shuffle(idx_k)
+            proportions = np.random.dirichlet(
+                np.repeat(dir_alpha, num_clients))
+            # Balance
+            proportions = np.array(
+                [p * (len(idx_j) < num_samples / num_clients) for p, idx_j in
+                 zip(proportions, idx_batch)])
+            proportions = proportions / proportions.sum()
+            proportions = (np.cumsum(proportions) * len(idx_k)).astype(int)[:-1]
+            idx_batch = [idx_j + idx.tolist() for idx_j, idx in
+                         zip(idx_batch, np.split(idx_k, proportions))]
+            min_size = min([len(idx_j) for idx_j in idx_batch])
+
+    client_dict = dict()
+    for cid in range(num_clients):
+        np.random.shuffle(idx_batch[cid])
+        client_dict[cid] = np.array(idx_batch[cid])
+
+    return client_dict
 
 def get_CIFAR10(alpha: float, num_clients: int) -> Tuple[List[DataLoader], List[DataLoader], List[int]]:
     transform = transforms.Compose([
