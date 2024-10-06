@@ -133,7 +133,7 @@ def embed_grad(grad: torch.Tensor, pca) -> torch.Tensor:
     V, S, translate_transform, scale_transform, _ = pca
     with torch.amp.autocast('cuda', enabled=False):
         grad =  (grad - translate_transform) / scale_transform
-        embedding: torch.Tensor = torch.matmul(grad, V)
+        embedding: torch.Tensor = torch.matmul(grad.to(V.device), V)
 
     if torch.any(torch.isnan(embedding)):
         raise Exception(
@@ -150,7 +150,7 @@ def project_back_embedding(embedding: torch.Tensor, pca, device) -> torch.Tensor
         raise Exception(
             f'NaNs in embedding: {torch.sum(torch.any(torch.isnan(embedding)))} NaNs')
     with torch.amp.autocast('cuda', enabled=False):
-        reconstructed = torch.matmul(embedding, V.t())
+        reconstructed = torch.matmul(embedding.to(device), V.t())
         if torch.any(torch.isnan(reconstructed)):
             raise Exception(
                 f'NaNs in reconstructed: {torch.sum(torch.any(torch.isnan(reconstructed)))} NaNs')

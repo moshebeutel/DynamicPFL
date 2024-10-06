@@ -1,0 +1,10 @@
+for dir in /home/dsi/beutelm/.virtualenvs/DynamicPFL/lib/python3.9/site-packages/nvidia/*/lib; do
+    export LD_LIBRARY_PATH=$dir:${LD_LIBRARY_PATH}
+done
+
+source ~/.virtualenvs/DynamicPFL/bin/activate
+
+
+cd GIT/DynamicPFL
+# or
+cd GIT/DynamicPFL_office

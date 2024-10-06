@@ -22,7 +22,8 @@ NOISE_MULTIPLIER_GRAD="$2"
 NOISE_MULTIPLIER_RESIDUAL="$3"
 CLIPPING_BOUND="$4"
 CLIPPING_BOUND_RESIDUAL="$5"
-RESUME_PATH="$6"
+BASIS_SIZE="$6"
+#RESUME_PATH="$6"
 SEED=43
 
 LOCAL_EPOCHS=5         # Each client iterate  times over all his local data
@@ -34,9 +35,9 @@ echo GPU "$GPU" SEED "$SEED" LOCAL_EPOCHS "${LOCAL_EPOCHS}"
 EVAL_AFTER=50
 EVAL_EVERY=10
 LOG_EVERY=5
-BASIS_SIZE=50
-PUBLIC_CLIENTS=50                    # clients used for subspace compute
-VIRTUAL_PUBLICS=50
+#BASIS_SIZE=200
+PUBLIC_CLIENTS=10                   # clients used for subspace compute
+VIRTUAL_PUBLICS=100
 HISTORY_SIZE=1000
 GEP_ARGUMENTS=(
           --num_public_clients "${PUBLIC_CLIENTS}"
