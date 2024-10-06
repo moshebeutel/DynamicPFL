@@ -1,3 +1,4 @@
+import gc
 from typing import Optional, Tuple
 import numpy as np
 import torch
@@ -93,74 +94,93 @@ def get_bases(pub_grad, num_bases):
     mx,_ = torch.max(pub_grad, dim=0, keepdim=True)
     mn,_ = torch.min(pub_grad, dim=0, keepdim=True)
 
-    translate_transform = float(mn.mean())
-    scale_transform = max(0.1, float(mx.mean()) - float(mn.mean()))
+    translate_transform = mn
+    # translate_transform = float(mn.mean())
+    scale_transform = torch.max(torch.tensor(.0001), mx - mn)
+    # scale_transform = max(0.1, float(mx.mean()) - float(mn.mean()))
     X = (pub_grad - translate_transform) / scale_transform
 
     # U, S, V = torch.pca_lowrank(X, q=num_bases, niter=2, center=True)
-    U, S, V = torch.linalg.svd(X, full_matrices=False)
+    U, S, Vh = torch.linalg.svd(X, full_matrices=False)
 
 
-
-    if torch.any(torch.isnan(V)):
+    if torch.any(torch.isnan(Vh)):
         raise Exception(
-            f'NaNs in V: {torch.sum(torch.any(torch.isnan(V)))} NaNs')
+            f'NaNs in V: {torch.sum(torch.any(torch.isnan(Vh)))} NaNs')
 
     explained_variance_ = ((S ** 2) / (num_samples - 1)).squeeze()
     total_var = torch.sum(explained_variance_)
     explained_variance_ratio_ = explained_variance_ / total_var
+
+    # for obj in [U,S,Vh,explained_variance_, explained_variance_ratio_]:
+    #     obj.detach().cpu()
 
     explained_variance_ratio_cumsum = torch.cumsum(explained_variance_ratio_, dim=0)
     num_components_explained_variance_ratio_dict = {}
     for th in [0.5, 0.75, 0.9, 0.95]:
         over_th = torch.argwhere(explained_variance_ratio_cumsum > th)
         over_th_idx = over_th[0] if len(over_th) > 0 else len(explained_variance_ratio_cumsum) - 1
-        num_components_explained_variance_ratio_dict[th] = over_th_idx
+        num_components_explained_variance_ratio_dict[th] = int(over_th_idx)
 
 
     # pca = torch.linalg.qr(pub_grad.t())
     # print(f'Q shape {pca[0].shape}')
     # print(f'R shape {pca[1].shape}')
 
-    return V.t()[:,:num_bases], S, translate_transform, scale_transform, num_components_explained_variance_ratio_dict
+    S=S.cpu()
+    U=U.cpu()
+    explained_variance_=explained_variance_.cpu()
+    explained_variance_ratio_=explained_variance_ratio_.cpu()
+    explained_variance_ratio_cumsum=explained_variance_ratio_cumsum.cpu()
+    del S,U,explained_variance_,explained_variance_ratio_, explained_variance_ratio_cumsum
+
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    # The principal directions are the transpose of Vh
+    V = Vh.t()[:,:num_bases]
+
+    return V, translate_transform, scale_transform, num_components_explained_variance_ratio_dict
 
 
 
 @torch.no_grad()
-def embed_grad(grad: torch.Tensor, pca) -> torch.Tensor:
+def embed_grad(grad: torch.Tensor, pca, device=torch.device('cuda')) -> torch.Tensor:
     # embedding: torch.Tensor = torch.matmul(grad, pca)
     # return embedding
-    V, S, translate_transform, scale_transform, _ = pca
+    V, translate_transform, scale_transform, _ = pca
+    # V, grad = V.to(device), grad.to(device)
     with torch.amp.autocast('cuda', enabled=False):
         grad =  (grad - translate_transform) / scale_transform
-        embedding: torch.Tensor = torch.matmul(grad.to(V.device), V)
+        embedding: torch.Tensor = torch.matmul(grad, V)
 
     if torch.any(torch.isnan(embedding)):
         raise Exception(
             f'NaNs in embedding: {torch.sum(torch.any(torch.isnan(embedding)))} NaNs')
-
+    # V, grad, embedding = V.detach().cpu(), grad.detach().cpu(), embedding.detach().cpu()
     return embedding
 
 @torch.no_grad()
 def project_back_embedding(embedding: torch.Tensor, pca, device) -> torch.Tensor:
     # reconstructed = torch.matmul(embedding, pca.t())
     # return reconstructed
-    V, S, translate_transform, scale_transform, _ = pca
+    V, translate_transform, scale_transform, _ = pca
+    V, embedding = V.to(device), embedding.to(device)
     if torch.any(torch.isnan(embedding)):
         raise Exception(
             f'NaNs in embedding: {torch.sum(torch.any(torch.isnan(embedding)))} NaNs')
     with torch.amp.autocast('cuda', enabled=False):
-        reconstructed = torch.matmul(embedding.to(device), V.t())
+        reconstructed = torch.matmul(embedding, V.t())
         if torch.any(torch.isnan(reconstructed)):
             raise Exception(
                 f'NaNs in reconstructed: {torch.sum(torch.any(torch.isnan(reconstructed)))} NaNs')
         reconstructed = (reconstructed * scale_transform) + translate_transform
-
+    # V, embedding, reconstructed = V.detach().cpu(), embedding.detach().cpu(), reconstructed.detach().cpu()
     return reconstructed
 
 
 @torch.no_grad()
-def compute_subspace(basis_gradients: torch.Tensor, num_basis_elements: int):
+def compute_subspace(basis_gradients: torch.Tensor, num_basis_elements: int, device=torch.device('cuda')):
 
     pca = get_bases(basis_gradients, num_basis_elements)
     return pca
@@ -169,20 +189,26 @@ def compute_subspace(basis_gradients: torch.Tensor, num_basis_elements: int):
 #  *************************
 
 @torch.no_grad()
-def add_new_gradients_to_history(new_gradients: torch.Tensor, basis_gradients: Optional[torch.Tensor],
-                                 gradients_history_size: int) -> Tensor:
+def add_new_gradients_to_history(new_gradients: torch.Tensor,
+                                 basis_gradients: Optional[torch.Tensor],
+                                 basis_gradients_cpu: Optional[torch.Tensor],
+                                 gradients_history_size: int) -> Tuple[Tensor, Tensor, int]:
     # print(f'\n\t\t\t\t\t\t\t\t1 - basis gradients shape {basis_gradients.shape if basis_gradients is not None else None}')
 
-    basis_gradients = torch.cat((basis_gradients, new_gradients), dim=0) \
-        if basis_gradients is not None \
+    basis_gradients_cpu = torch.cat((basis_gradients_cpu, new_gradients), dim=0) \
+        if basis_gradients_cpu is not None \
         else new_gradients
     # print(f'\n\t\t\t\t\t\t\t\t2 - basis gradients shape {basis_gradients.shape}')
 
-    basis_gradients = basis_gradients[-gradients_history_size:] \
-        if gradients_history_size < basis_gradients.shape[0] \
-        else basis_gradients
+    basis_gradients_cpu = basis_gradients_cpu[-gradients_history_size:] \
+        if gradients_history_size < basis_gradients_cpu.shape[0] \
+        else basis_gradients_cpu
 
         # print(f'\n\t\t\t\t\t\t\t\t3 - basis gradients shape {basis_gradients.shape}')
 
-    return basis_gradients
+    basis_gradients = basis_gradients_cpu.to('cuda', non_blocking=True)
+
+    filled_history_size = basis_gradients_cpu.shape[0]
+
+    return basis_gradients, basis_gradients_cpu, filled_history_size
 

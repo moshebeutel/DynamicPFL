@@ -1,3 +1,4 @@
+import copy
 import gc
 import os
 import random
@@ -62,7 +63,7 @@ gradient_history_size = args.history_size
 local_epoch = args.local_epoch
 global_epoch = args.global_epoch
 batch_size = args.batch_size
-pub_batch_size = 8
+pub_batch_size = 64
 target_epsilon = args.target_epsilon
 target_delta = args.target_delta
 clipping_bound = args.clipping_bound
@@ -70,7 +71,10 @@ clipping_bound_residual = args.clipping_bound_residual
 dataset = args.dataset
 user_sample_rate = args.user_sample_rate
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+if device==torch.device('cuda'):
+    current_device = torch.cuda.current_device()
+    device = torch.device(f'cuda:{current_device}')
+print(f'Device: {device}')
 if args.store == True:
     saved_stdout = sys.stdout
     file = open(
@@ -109,7 +113,7 @@ def filter_outliar_grads(grads: torch.Tensor, z_thresh: float = 3.0) -> Tensor:
 
 def local_update(model, dataloader):
     model.train()
-    model = model.to(device)
+    # model = model.to(device)
     optimizer = optim.Adam(params=model.parameters(), lr=args.lr)
     loss_fn = nn.CrossEntropyLoss()
     total_loss = 0.0
@@ -124,14 +128,14 @@ def local_update(model, dataloader):
             total_loss += float(loss)
             del data, labels, loss, outputs
     gc.collect()
-    torch.cuda.empty_cache()
-    model = model.to('cpu')
-    return model, total_loss / local_epoch
+    # model = model.to('cpu')
+    # torch.cuda.empty_cache()
+    return model.state_dict(), total_loss / local_epoch
 
 
 def test(client_model, client_testloader):
     client_model.eval()
-    client_model = client_model.to(device)
+    # client_model = client_model.to(device)
 
     num_data = 0
 
@@ -146,12 +150,38 @@ def test(client_model, client_testloader):
 
     accuracy = 100.0 * correct / num_data
 
-    client_model = client_model.to('cpu')
+    # client_model = client_model.to('cpu')
 
     return accuracy
 
+class AugStackTransform(v2.Transform):
+    def __init__(self, multiplicity: int):
+        super().__init__()
+        assert 0 < multiplicity < 201, f'multiplicity {multiplicity} is out of range'
+
+        cutmix = v2.CutMix(num_classes=10)
+        mixup = v2.MixUp(num_classes=10)
+        cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
+        self.multiple_augments = torch.nn.ModuleList([cutmix_or_mixup for i in range(multiplicity)])
+        self._multiplicity = multiplicity
+    def forward(self, batch):
+        batch = [aug(batch) for aug in self.multiple_augments]
+        images = torch.cat([b[0] for b in batch], dim=0)
+        labels = torch.cat([b[1] for b in batch], dim=0)
+        return images, labels
+
+
+
+
+
+
+
 
 def main():
+    # enable memory history, which will
+    # add tracebacks and event history to snapshots
+    # torch.cuda.memory._record_memory_history()
+
     best_acc = 0.0
     mean_acc_s = []
     acc_matrix = []
@@ -190,7 +220,7 @@ def main():
         resume_path = Path(args.save_model_path) / args.resume_path
         assert resume_path.exists(), f'{resume_path} does not exist'
         global_model, base_epoch, loss, acc, best_acc = load_checkpoint(model=global_model, path=resume_path,
-                                                                        device=device)
+                                                                        device=torch.device('cpu'))
 
     # for client_model in clients_models:
     #     client_model.load_state_dict(global_model.state_dict())
@@ -241,30 +271,34 @@ def main():
 
         public_dataset = TensorDataset(X, y)
 
-        cutmix = v2.CutMix(num_classes=10)
-        mixup = v2.MixUp(num_classes=10)
-        cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
-
-
-        print(f'virtual_ratio {virtual_ratio}  ')
-
-        def collate_fn(batch):
-            super_batch = [cutmix_or_mixup(*default_collate(batch))] * virtual_ratio
-            images = torch.cat([data[0] for data in super_batch])
-            labels = torch.cat([data[1] for data in super_batch])
-
-            return images, labels
+        # cutmix = v2.CutMix(num_classes=10)
+        # mixup = v2.MixUp(num_classes=10)
+        # cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
+        #
+        #
+        # print(f'virtual_ratio {virtual_ratio}  ')
+        #
+        # def collate_fn(batch):
+        #     super_batch = [cutmix_or_mixup(*default_collate(batch))] * virtual_ratio
+        #     images = torch.cat([data[0] for data in super_batch])
+        #     labels = torch.cat([data[1] for data in super_batch])
+        #
+        #     return images, labels
 
         # return DataLoader(public_dataset, batch_size=pub_batch_size, shuffle=True)
-        return DataLoader(public_dataset, batch_size=pub_batch_size, shuffle=True, collate_fn=collate_fn,
-                          num_workers=2, pin_memory=True, drop_last=True)
+        return DataLoader(public_dataset, batch_size=pub_batch_size, shuffle=True, drop_last=True)
+
+    print(f'virtual_ratio {virtual_ratio}  ')
+    augmenter = AugStackTransform(multiplicity=virtual_ratio)
 
     public_clients_loader = get_aux_dataset(num_virtual_clients=num_virtual_public_clients,
                                             original_public_loaders=clients_train_loaders[:num_public_clients])
     # public_clients_loader, cutmix_or_mixup = get_aux_dataset(num_virtual_clients=num_virtual_public_clients,
     #                                         original_public_loaders=clients_train_loaders[:num_public_clients])
 
+    # allocate all GPU memory needed for history
     basis_gradients: Optional[torch.Tensor] = None
+    basis_gradients_cpu: Optional[torch.Tensor] = None
 
     # Divide basis elements to groups proportional to the sqrt of group size
     sqrt_num_param_list = np.sqrt(np.array(num_param_list))
@@ -295,7 +329,6 @@ def main():
 
         public_client_model = cifar10Net()
         public_client_model = extend(public_client_model)
-        # public_client_model.load_state_dict(global_model.state_dict())
         public_client_model.to(device)
         optimizer = optim.Adam(params=public_client_model.parameters(), lr=args.lr)
         loss_fn = nn.CrossEntropyLoss()
@@ -303,6 +336,8 @@ def main():
         num_pub_samples = 0
         for data, labels in public_clients_loader:
             data, labels = data.to(device), labels.to(device)
+            data,labels = augmenter((data, labels))
+
             current_batch_size = labels.size(0)
             num_pub_samples += current_batch_size
             # print(f'data shape: {data.shape}')
@@ -320,7 +355,8 @@ def main():
             for n, p in public_client_model.named_parameters():
                 assert p.grad_batch.shape[0] == current_batch_size, f'Expected {current_batch_size} per sample grads'
                 assert p.grad_batch.numel() == current_batch_size * p.numel(), f'Expected {current_batch_size}*{p.numel()} per sample grads elements'
-                public_clients_model_updates[n].extend(p.grad_batch)
+
+                public_clients_model_updates[n].extend(p.grad_batch.detach().cpu())
                 # public_clients_model_updates_not_used[n].append(p.grad.detach())
                 p.grad_batch.cpu()
                 del p.grad_batch, p.grad
@@ -328,14 +364,18 @@ def main():
             optimizer.step()
 
             to_erase= (data, labels, loss, outputs)
-            to_erase = (obj.cpu() for obj in to_erase)
-            del data, labels, loss, outputs
+            to_erase = (obj.detach().cpu() for obj in to_erase)
+            del data, labels, loss, outputs, to_erase
         public_client_model.cpu()
         del public_client_model
         gc.collect()
         torch.cuda.empty_cache()
 
         pbar.set_description(f'Epoch {epoch} aggregate public grads '
+                             # f'memory allocated {torch.cuda.memory_allocated()} '
+                             # f'max memory allocated {torch.cuda.max_memory_allocated()} '
+                             # f'memory reserved {torch.cuda.memory_reserved()} '
+                             # f'max memory reserved {torch.cuda.max_memory_reserved()} '
                              f'clips {clipping_bound}, {clipping_bound_residual} '
                              f'noise multipliers {noise_multiplier}, {noise_multiplier_residual}')
 
@@ -344,6 +384,10 @@ def main():
         #                               global_model.named_parameters()]
 
         pbar.set_description(f'Epoch {epoch} flatten public grads '
+                             #  f'memory allocated {torch.cuda.memory_allocated()} '
+                             # f'max memory allocated {torch.cuda.max_memory_allocated()} '
+                             # f'memory reserved {torch.cuda.memory_reserved()} '
+                             # f'max memory reserved {torch.cuda.max_memory_reserved()} '
                              f'clips {clipping_bound}, {clipping_bound_residual} '
                              f'noise multipliers {noise_multiplier}, {noise_multiplier_residual}')
 
@@ -351,6 +395,7 @@ def main():
         assert public_grads_flat.dim() == 2, f'Expected flat grads per sample'
         assert public_grads_flat.shape[0] == num_pub_samples, f'Expected grad per sample'
         assert public_grads_flat.shape[1] == num_trainable_params, f'Expected {num_trainable_params} element per grad'
+        assert public_grads_flat.device == torch.device('cpu'), f'Expected public_grads_flat.device cpu, got {public_grads_flat.device}'
         # pub_grad_mean_norm = norm_of_rows(public_grads_flat)
         # if torch.any(torch.isnan(public_grads_flat)):
         #     mask = ~torch.isnan(public_grads_flat).any(dim=1)
@@ -395,26 +440,39 @@ def main():
             remaining_mean = public_grads_flat[num_splits * rows_per_split:].mean(dim=0, keepdim=True)
             public_virtual_grads = torch.cat([public_virtual_grads, remaining_mean], dim=0)
 
+        assert public_virtual_grads.device==torch.device('cpu'), f'Expected public_virtual_grads.device cpu , got {public_virtual_grads.device}'
+
         pbar.set_description(f'Epoch {epoch} add public grads to history '
+                             #  f'memory allocated {torch.cuda.memory_allocated()} '
+                             # f'max memory allocated {torch.cuda.max_memory_allocated()} '
+                             # f'memory reserved {torch.cuda.memory_reserved()} '
+                             # f'max memory reserved {torch.cuda.max_memory_reserved()} '
                              f'clips {clipping_bound}, {clipping_bound_residual} '
                              f'noise multipliers {noise_multiplier}, {noise_multiplier_residual}')
 
-        basis_gradients = add_new_gradients_to_history(public_virtual_grads, basis_gradients, gradient_history_size)
+        basis_gradients, basis_gradients_cpu, filled_history_size = add_new_gradients_to_history(public_virtual_grads, basis_gradients, basis_gradients_cpu, gradient_history_size)
         assert basis_gradients.shape[0] <= gradient_history_size, (f'Expected history of {gradient_history_size} grads'
                                                                    f' at most,'
                                                                    f' got {basis_gradients.shape[0]}')
         assert basis_gradients.shape[1] == num_trainable_params, \
             f'Expected history of {num_trainable_params} entry grads'
 
+        assert basis_gradients.device == device, f'Expected basis gradients device {device}, got {basis_gradients.device}'
+        assert basis_gradients_cpu.device == torch.device('cpu'), f'Expected basis_gradients_cpu device cpu, got {basis_gradients_cpu.device}'
+
+
+
         pbar.set_description(f'Epoch {epoch} compute new subspace '
+                             #  f'memory allocated {torch.cuda.memory_allocated()} '
+                             # f'max memory allocated {torch.cuda.max_memory_allocated()} '
+                             # f'memory reserved {torch.cuda.memory_reserved()} '
+                             # f'max memory reserved {torch.cuda.max_memory_reserved()} '
                              f'clips {clipping_bound}, {clipping_bound_residual} '
                              f'noise multipliers {noise_multiplier}, {noise_multiplier_residual}')
 
-        public_grads_flat.detach().cpu()
-        public_virtual_grads.detach().cpu()
-        for pg in public_grads_list:
-            pg.detach().cpu()
-
+        public_grads_flat=public_grads_flat.cpu()
+        public_virtual_grads=public_virtual_grads.cpu()
+        public_grads_list=[pg.cpu() for pg in public_grads_list]
         del public_grads_list, public_grads_flat, public_virtual_grads
         gc.collect()
         torch.cuda.empty_cache()
@@ -425,12 +483,12 @@ def main():
 
         num_components_explained_variance_ratio_lists_dict = {0.5: [], 0.75: [], 0.9: [], 0.95: []}
         for i, num_param in enumerate(num_param_list):
-            pub_grad = basis_gradients[:, offset:offset + num_param]
+            pub_grad:torch.Tensor = basis_gradients[:filled_history_size, offset:offset + num_param]
             offset += num_param
 
             num_bases = num_bases_list[i]
 
-            pca = compute_subspace(pub_grad, num_bases)
+            pca = compute_subspace(pub_grad, num_bases, device)
             num_components_explained_variance_ratio_dict = pca[-1]
             for k, v in num_components_explained_variance_ratio_dict.items():
                 assert k in num_components_explained_variance_ratio_lists_dict
@@ -439,6 +497,10 @@ def main():
             pca_for_group.append(pca)
 
         pbar.set_description(f'Epoch {epoch} subspace computed ! '
+                             #  f'memory allocated {torch.cuda.memory_allocated()} '
+                             # f'max memory allocated {torch.cuda.max_memory_allocated()} '
+                             # f'memory reserved {torch.cuda.memory_reserved()} '
+                             # f'max memory reserved {torch.cuda.max_memory_reserved()} '
                              f'clips {clipping_bound}, {clipping_bound_residual} '
                              f'noise multipliers {noise_multiplier}, {noise_multiplier_residual}')
 
@@ -451,31 +513,39 @@ def main():
         sampled_clients_test_loaders = [clients_test_loaders[i] for i in sampled_client_indices]
 
         pbar.set_description(f'Epoch {epoch} sampled {sampled_client_indices} '
+                             #  f'memory allocated {torch.cuda.memory_allocated()} '
+                             # f'max memory allocated {torch.cuda.max_memory_allocated()} '
+                             # f'memory reserved {torch.cuda.memory_reserved()} '
+                             # f'max memory reserved {torch.cuda.max_memory_reserved()} '
                              f'clips {clipping_bound}, {clipping_bound_residual} '
                              f'noise multipliers {noise_multiplier}, {noise_multiplier_residual}')
 
         clients_accuracies = []
         clients_losses = []
+        client_model = cifar10Net().to(device)
         for idx, (client_trainloader, client_testloader) in enumerate(
                 zip(sampled_clients_train_loaders, sampled_clients_test_loaders)):
             pbar.set_description(f'Epoch {epoch} Client in Iter {idx + 1} Client ID {sampled_client_indices[idx]} '
+                             #      f'memory allocated {torch.cuda.memory_allocated()} '
+                             # f'max memory allocated {torch.cuda.max_memory_allocated()} '
+                             # f'memory reserved {torch.cuda.memory_reserved()} '
+                             # f'max memory reserved {torch.cuda.max_memory_reserved()} '
                                  f'clips {clipping_bound}, {clipping_bound_residual} '
                                  f'noise multipliers {noise_multiplier}, {noise_multiplier_residual}')
 
-            client_model = cifar10Net()
+            # client_model = cifar10Net()
             client_model.load_state_dict(global_model.state_dict())
-            local_model, loss = local_update(client_model, client_trainloader)
+            local_model_state_dict, loss = local_update(client_model, client_trainloader)
             clients_losses.append(loss)
             if to_eval:
                 accuracy = test(client_model, client_testloader)
                 clients_accuracies.append(accuracy)
 
             # get client grads
-            for n, p in client_model.named_parameters():
-                clients_model_updates[n].append(p.data.detach() - prev_params[n])
-
-            del client_model
-
+            for n, p in local_model_state_dict.items():
+                clients_model_updates[n].append(p.data.detach().cpu() - prev_params[n])
+        client_model = client_model.cpu()
+        del client_model
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -483,11 +553,13 @@ def main():
         grads_list = [torch.stack(clients_model_updates[n]) for n, p in global_model.named_parameters()]
 
         # flatten grads for clipping and noising
-        private_grads = flatten_tensor(grads_list)
+        private_grads: torch.Tensor = flatten_tensor(grads_list) #cpu
         del grads_list
         assert private_grads.shape == (sampled_client_num, num_trainable_params), (f'Expected a gradient row vector'
                                                                                    f' for each sampled client,'
                                                                                    f' got {private_grads.shape}')
+        assert private_grads.device == torch.device('cpu'), f'Expected private gradient device to be cpu, got {private_grads.device}'
+        private_grads = private_grads.to(device, non_blocking=True)
         # deal with outliars
         # outlier_mask = filter_outliar_grads(private_grads)
         # outlier_users_list = outlier_mask.any(dim=1)
@@ -506,6 +578,8 @@ def main():
         clean_reconstruction_list = []
 
         offset = 0
+        group_centers = []
+        group_scales = []
         for i, num_param in enumerate(num_param_list):
             grad_group = private_grads[:, offset:offset + num_param]
             assert grad_group.shape == (sampled_client_num, num_param), \
@@ -514,7 +588,14 @@ def main():
 
             pca = pca_for_group[i]
 
-            embedded_grads_group = embed_grad(grad_group, pca).to(device)
+            # mx, _ = torch.max(grad_group, dim=0, keepdim=True)
+            # mn, _ = torch.min(grad_group, dim=0, keepdim=True)
+            # translate_transform = mn
+            # scale_transform = torch.max(torch.tensor(.000001), mx - mn)
+            # grad_group = (grad_group - translate_transform) / scale_transform
+            # group_centers.append(translate_transform)
+            # group_scales.append(scale_transform)
+            embedded_grads_group:torch.Tensor = embed_grad(grad_group, pca, device)
             assert embedded_grads_group.shape[0] == sampled_client_num, (f'Expected group embedding'
                                                                          f' with {sampled_client_num} rows.'
                                                                          f' Each for every sampled client,'
@@ -525,7 +606,8 @@ def main():
 
             if torch.any(torch.isnan(embedded_grads_group)):
                 raise Exception(f'NaNs in embedding: {torch.sum(torch.any(torch.isnan(embedded_grads_group)))} NaNs')
-            clean_reconstruction_group = project_back_embedding(embedded_grads_group, pca, device)
+            clean_reconstruction_group: torch.Tensor = project_back_embedding(embedded_grads_group, pca, device)
+            # clean_reconstruction_group = (clean_reconstruction_group * scale_transform) + translate_transform
             assert clean_reconstruction_group.shape == (sampled_client_num, num_param), \
                 (f'Expected a reconstruction gradient row vector for each sampled client,'
                  f' got {clean_reconstruction_group.shape}')
@@ -539,18 +621,26 @@ def main():
             # residual_list.append(residual_group)
             offset += num_param
 
-        embedded_grads = torch.cat(embedding_list, dim=1).detach().cpu()
+        embedded_grads:torch.Tensor = torch.cat(embedding_list, dim=1)
+        # assert embedded_grads.device == torch.device('cpu'), f'Expected embedded grads to be cpu, got {embedded_grads.device}'
+        assert embedded_grads.device == device, f'Expected embedded grads to be cpu, got {embedded_grads.device}'
         # assert embedded_grads.shape == (sampled_client_num, num_basis_elements_actual), \
         #     (f'Expected a gradient row vector embedded'
         #      f' in a {num_basis_elements_actual}-D subspace for each sampled client, got {private_grads.shape}')
 
-        clean_reconstruction = torch.cat(clean_reconstruction_list, dim=1).detach().cpu()
+        clean_reconstruction:torch.Tensor = torch.cat(clean_reconstruction_list, dim=1)
+        assert clean_reconstruction.device == device, f'Expected device to be cpu, got {clean_reconstruction.device}'
+        # assert clean_reconstruction.device == torch.device('cpu'), f'Expected device to be cpu, got {clean_reconstruction.device}'
         assert clean_reconstruction.shape == (sampled_client_num, num_trainable_params), (f'Expected a '
                                                                                           f'{num_trainable_params} row vector'
                                                                                           f' for each sampled client,'
                                                                                           f' got {clean_reconstruction.shape}')
 
-        projection_residual = private_grads - clean_reconstruction
+        projection_residual:torch.Tensor = private_grads - clean_reconstruction
+        assert projection_residual.device == device, f'Expected device {device}, got {projection_residual.device}'
+        # assert projection_residual.device == torch.device('cpu'), f'Expected device {torch.device("cpu")}, got {projection_residual.device}'
+
+
         #
         # cosine_reconstruction_clean_mat = projection_residual @ clean_reconstruction.t() / (
         #         mean_norm_of_rows(projection_residual) * mean_norm_of_rows(clean_reconstruction))
@@ -582,7 +672,7 @@ def main():
         sampled_client_weights = torch.tensor([
             sampled_client_data_size / sum(sampled_client_data_sizes)
             for sampled_client_data_size in sampled_client_data_sizes
-        ]).reshape(-1, 1)
+        ], device=device).reshape(-1, 1)
         if torch.any(torch.isnan(sampled_client_weights)):
             raise Exception(
                 f'NaNs in sampled_client_weights: {torch.sum(torch.any(torch.isnan(sampled_client_weights)))} NaNs')
@@ -605,6 +695,7 @@ def main():
         std_grads = noise_multiplier * clipping_bound
         grad_noise = torch.normal(mean=0.0, std=noise_multiplier * clipping_bound,
                                   size=embedded_grads_clipped.shape) if std_grads > 0 else torch.zeros_like(embedded_grads_clipped)
+        grad_noise=grad_noise.to(device)
         noised_embedded_grads = embedded_grads_clipped + grad_noise
         assert noised_embedded_grads.shape == embedded_grads.shape, \
             f'Noising should not change shape of embedded grads, got {noised_embedded_grads.shape}'
@@ -625,6 +716,7 @@ def main():
         std_residuals = noise_multiplier_residual * clipping_bound_residual
         noise_residual = torch.normal(mean=0.0, std=noise_multiplier_residual * clipping_bound_residual,
                                       size=residual_update_clipped.shape) if std_residuals > 0 else torch.zeros_like(residual_update_clipped)
+        noise_residual=noise_residual.to(device)
         noised_residual_update = residual_update_clipped + noise_residual
         assert noised_residual_update.shape == projection_residual.shape, \
             f'Noising should not change shape of residuals, got {noised_residual_update.shape}'
@@ -635,7 +727,18 @@ def main():
             noised_embedded_grad_group = noised_embedded_grads[:, offset:offset + num_bases]
             pca = pca_for_group[i]
 
+            # mx, _ = torch.max(noised_embedded_grad_group, dim=0, keepdim=True)
+            # mn, _ = torch.min(noised_embedded_grad_group, dim=0, keepdim=True)
+            # noised_translate_transform = mn
+            # noised_scale_transform = torch.max(torch.tensor(.000001), mx - mn)
+            # noised_embedded_grad_group = (noised_embedded_grad_group - noised_translate_transform) / noised_scale_transform
+            #
+            # scale_transform=group_scales[i]
+            # translate_transform=group_centers[i]
             reconstruction_group = project_back_embedding(noised_embedded_grad_group, pca, device)
+
+            # reconstruction_group = (reconstruction_group * scale_transform) + translate_transform
+
             assert reconstruction_group.shape == (sampled_client_num, num_param_list[i]), \
                 (f'Expected a reconstructed to {num_param_list[i]}-D group gradient row vector for each sampled client,'
                  f' got {reconstruction_group.shape}')
@@ -643,7 +746,7 @@ def main():
             reconstruction_list.append(reconstruction_group)
             offset += num_bases
 
-        reconstructed_grads = torch.cat(reconstruction_list, dim=1).detach().cpu()
+        reconstructed_grads = torch.cat(reconstruction_list, dim=1)
         assert reconstructed_grads.shape == (sampled_client_num, num_trainable_params), \
             f'Expected a reconstructed gradient row vector for each sampled client, got {reconstructed_grads.shape}'
 
@@ -659,15 +762,15 @@ def main():
 
             private_grad_norms_median = private_grad_norms.median()
 
-            embedded_grads_norms: torch.Tensor = norm_of_rows(embedded_grads)
+            # embedded_grads_norms: torch.Tensor = norm_of_rows(embedded_grads)
 
-            embedded_grads_norms_max = embedded_grads_norms.max()
+            embedded_grads_norms_max = float(embedded_grads_norms.max())
 
-            embedded_grads_norms_min = embedded_grads_norms.min()
+            embedded_grads_norms_min = float(embedded_grads_norms.min())
 
-            embedded_grads_norms_mean = embedded_grads_norms.mean()
+            embedded_grads_norms_mean = float(embedded_grads_norms.mean())
 
-            embedded_grads_norms_median = embedded_grads_norms.median()
+            embedded_grads_norms_median = float(embedded_grads_norms.median())
 
             #
             # noised_grads_norm_mean = mean_norm_of_rows(noised_embedded_grads)
@@ -681,16 +784,28 @@ def main():
             #
             # reconstructed_norm_mean = mean_norm_of_rows(reconstructed_grads)
 
-            sqr_reconstruction_plus_sqr_residual = norm_of_rows_squared(clean_reconstruction) + norm_of_rows_squared(
-                projection_residual)
-            sqr_grads = norm_of_rows_squared(private_grads)
+            reconstructed_grads_norms: torch.Tensor = norm_of_rows(reconstructed_grads)
+            reconstructed_grads_norms_max = float(reconstructed_grads_norms.max())
+            reconstructed_grads_norms_min = float(reconstructed_grads_norms.min())
+            reconstructed_grads_norms_mean = float(reconstructed_grads_norms.mean())
+            reconstructed_grads_norms_median = float(reconstructed_grads_norms.median())
 
-            reconstruction_diff = torch.dist(sqr_grads, sqr_reconstruction_plus_sqr_residual)
+            reconstructed_grads_ratio = reconstructed_grads_norms / private_grad_norms
+            reconstructed_grads_ratio_median = float(reconstructed_grads_ratio.median())
+            residual_grads_ratio = residual_update_norms / private_grad_norms
+            residual_grads_ratio_median =  float(residual_grads_ratio.median())
 
-            reconstruction_diff_mean = float(reconstruction_diff.mean())
-            reconstruction_diff_min = float(reconstruction_diff.min())
-            reconstruction_diff_max = float(reconstruction_diff.max())
-            reconstruction_diff_median = float(reconstruction_diff.median())
+
+            # sqr_reconstruction_plus_sqr_residual = norm_of_rows_squared(clean_reconstruction) + norm_of_rows_squared(
+            #     projection_residual)
+            # sqr_grads = norm_of_rows_squared(private_grads)
+
+            # reconstruction_diff = torch.dist(sqr_grads, sqr_reconstruction_plus_sqr_residual)
+            #
+            # reconstruction_diff_mean = float(reconstruction_diff.mean())
+            # reconstruction_diff_min = float(reconstruction_diff.min())
+            # reconstruction_diff_max = float(reconstruction_diff.max())
+            # reconstruction_diff_median = float(reconstruction_diff.median())
 
             cosine_reconstruction_clean_residual_clean_mat = torch.diagonal(
                 projection_residual @ clean_reconstruction.t()) / (
@@ -742,10 +857,12 @@ def main():
             hlog_dict['private_grad_norms_min'] = private_grad_norms_min
             hlog_dict['private_grad_norms_median'] = private_grad_norms_median
             hlog_dict.update({
-                'reconstruction_diff_mean': reconstruction_diff_mean,
-                'reconstruction_diff_min': reconstruction_diff_min,
-                'reconstruction_diff_max': reconstruction_diff_max,
-                'reconstruction_diff_median': reconstruction_diff_median,
+                'reconstructed_grads_ratio': reconstructed_grads_ratio_median,
+                'residual_grads_ratio': residual_grads_ratio_median,
+                'reconstructed_grads_norms_max': reconstructed_grads_norms_max,
+                'reconstructed_grads_norms_min': reconstructed_grads_norms_min,
+                'reconstructed_grads_norms_median': reconstructed_grads_norms_median,
+                'reconstructed_grads_norms_mean': reconstructed_grads_norms_mean,
                 'residual_norm_mean': residual_norm_mean,
                 'residual_norm_min': residual_norm_min,
                 'residual_norm_max': residual_norm_max,
@@ -791,7 +908,7 @@ def main():
             # wandb.log(log_dict, step=epoch)
             wandb.log(hlog_dict, step=epoch)
 
-        del private_grads
+
 
         aggregated_update = (reconstructed_grads.T @ sampled_client_weights).T.squeeze()
         assert aggregated_update.shape == torch.Size([num_trainable_params]), \
@@ -799,7 +916,7 @@ def main():
         if torch.any(torch.isnan(aggregated_update)):
             raise Exception(
                 f'NaNs in aggregated_update: {torch.sum(torch.any(torch.isnan(aggregated_update)))} NaNs')
-        aggregated_residuals = (noised_residual_update.T.cpu() @ sampled_client_weights).T.squeeze()
+        aggregated_residuals = (noised_residual_update.T @ sampled_client_weights).T.squeeze()
         assert aggregated_residuals.shape == torch.Size([num_trainable_params]), \
             f'Expected a single {num_trainable_params}-D row vector , got {aggregated_residuals.shape}'
         if torch.any(torch.isnan(aggregated_residuals)):
@@ -808,13 +925,44 @@ def main():
         # update global net
         new_params = {}
         offset = 0
+
+
+
+        noise_residual=noise_residual.cpu()
+        grad_noise=grad_noise.cpu()
+        residual_clip_factor=residual_clip_factor.cpu()
+        residual_update_clipped=residual_update_clipped.cpu()
+        grad_clip_factor=grad_clip_factor.cpu()
+        embedded_grads_clipped=embedded_grads_clipped.cpu()
+        noised_embedded_grads=noised_embedded_grads.cpu()
+        projection_residual=projection_residual.cpu()
+        clean_reconstruction=clean_reconstruction.cpu()
+        embedded_grads=embedded_grads.cpu()
+        private_grads=private_grads.cpu()
+        noised_residual_update=noised_residual_update.cpu()
+        reconstructed_grads=reconstructed_grads.cpu()
+        sampled_client_weights=sampled_client_weights.cpu()
+        aggregated_update=aggregated_update.cpu()
+        aggregated_residuals=aggregated_residuals.cpu()
         for n, p in prev_params.items():
             new_params[n] = (p +
-                             aggregated_update[offset: offset + p.numel()].reshape(p.shape).cpu() +
-                             aggregated_residuals[offset: offset + p.numel()].reshape(p.shape).cpu())
+                             aggregated_update[offset: offset + p.numel()].reshape(p.shape) +
+                             aggregated_residuals[offset: offset + p.numel()].reshape(p.shape))
             offset += p.numel()
         # update new parameters of global net
         global_model.load_state_dict(new_params)
+
+        del new_params, aggregated_update, aggregated_residuals,\
+            reconstructed_grads, noised_residual_update,\
+            private_grads, embedded_grads, clean_reconstruction, projection_residual,\
+            embedded_grads_clipped, grad_clip_factor, noised_embedded_grads,\
+            residual_update_clipped, residual_clip_factor, grad_noise, noise_residual, sampled_client_weights
+
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        # torch.cuda.memory._dump_snapshot(f"gpu_snapshots/my_snapshot_epoch_{epoch}.pickle")
+
 
         # update client models
         # for client_model in clients_models:

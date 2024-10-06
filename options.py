@@ -31,7 +31,7 @@ def parse_args():
     parser.add_argument('--num_clients', type=int, default=512, help="Number of clients")
     parser.add_argument('--local_epoch', type=int, default=4, help="Number of local epochs")
     parser.add_argument('--global_epoch', type=int, default=960, help="Number of global epochs")
-    parser.add_argument('--batch_size', type=int, default=32, help="Batch size")
+    parser.add_argument('--batch_size', type=int, default=64, help="Batch size")
 
     # >>> ***GEP
     parser.add_argument('--num_public_clients', type=int, default=50,

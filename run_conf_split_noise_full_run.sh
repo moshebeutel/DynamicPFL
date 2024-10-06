@@ -32,13 +32,13 @@ LOCAL_EPOCHS=5         # Each client iterate  times over all his local data
 echo GPU "$GPU" SEED "$SEED" LOCAL_EPOCHS "${LOCAL_EPOCHS}"
 
 
-EVAL_AFTER=50
+EVAL_AFTER=10
 EVAL_EVERY=10
 LOG_EVERY=5
 #BASIS_SIZE=200
-PUBLIC_CLIENTS=10                   # clients used for subspace compute
-VIRTUAL_PUBLICS=100
-HISTORY_SIZE=1000
+PUBLIC_CLIENTS=250                   # clients used for subspace compute
+VIRTUAL_PUBLICS=500
+HISTORY_SIZE=2000
 GEP_ARGUMENTS=(
           --num_public_clients "${PUBLIC_CLIENTS}"
           --basis_size "${BASIS_SIZE}"
@@ -107,7 +107,7 @@ ARGUMENTS=(
 
 
 echo  ${DATASET} FedAvg GEP RESIDUAL VIRTUAL SINGLE LOADER  with arguments "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"
-CUDA_VISIBLE_DEVICES=$GPU python main_base_gep_virtual_public_single_loader_groups.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"
+CUDA_VISIBLE_DEVICES="$GPU" python main_base_gep_virtual_public_single_loader_groups.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"
 #      CUDA_VISIBLE_DEVICES=$GPU python main_base_gep_virtual_public_single_loader_groups.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"  >> "${LOG_FOLDER}"/FedAvgGep_"${EXP_NAME}".txt
 #    done
 #  done
