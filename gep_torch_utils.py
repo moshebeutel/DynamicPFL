@@ -94,14 +94,14 @@ def get_bases(pub_grad, num_bases):
     mx,_ = torch.max(pub_grad, dim=0, keepdim=True)
     mn,_ = torch.min(pub_grad, dim=0, keepdim=True)
 
-    translate_transform = mn
-    # translate_transform = float(mn.mean())
-    scale_transform = torch.max(torch.tensor(.0001), mx - mn)
-    # scale_transform = max(0.1, float(mx.mean()) - float(mn.mean()))
+    # translate_transform = mn
+    translate_transform = float(mn.mean())
+    # scale_transform = torch.max(torch.tensor(.0001), mx - mn)
+    scale_transform = max(0.1, float(mx.mean()) - float(mn.mean()))
     X = (pub_grad - translate_transform) / scale_transform
 
     # U, S, V = torch.pca_lowrank(X, q=num_bases, niter=2, center=True)
-    U, S, Vh = torch.linalg.svd(X, full_matrices=False)
+    _, S, Vh = torch.linalg.svd(X, full_matrices=False)
 
 
     if torch.any(torch.isnan(Vh)):
@@ -128,11 +128,10 @@ def get_bases(pub_grad, num_bases):
     # print(f'R shape {pca[1].shape}')
 
     S=S.cpu()
-    U=U.cpu()
     explained_variance_=explained_variance_.cpu()
     explained_variance_ratio_=explained_variance_ratio_.cpu()
     explained_variance_ratio_cumsum=explained_variance_ratio_cumsum.cpu()
-    del S,U,explained_variance_,explained_variance_ratio_, explained_variance_ratio_cumsum
+    del S,explained_variance_,explained_variance_ratio_, explained_variance_ratio_cumsum
 
     gc.collect()
     torch.cuda.empty_cache()
