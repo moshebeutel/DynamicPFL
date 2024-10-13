@@ -72,7 +72,7 @@ def parse_args():
     parser.add_argument("--eval-every", type=int, default=10, help="eval every X selected epochs")
     parser.add_argument("--eval-after", type=int, default=50, help="eval only after X selected epochs")
 
-    parser.add_argument('--wandb', type=bool, default=True)
+    parser.add_argument('--wandb', type=bool, default=False)
 
     parser.add_argument('--exp-name', type=str, default='')
     #############################

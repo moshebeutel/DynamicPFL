@@ -197,7 +197,8 @@ def main():
             print(clients_accuracies)
             acc = sum(clients_accuracies) / len(clients_accuracies)
             best_acc = max(acc, best_acc)
-            wandb.log({'Accuracy': acc, 'Best Accuracy': best_acc})
+            if args.wandb:
+                wandb.log({'Accuracy': acc, 'Best Accuracy': best_acc})
             mean_acc_s.append(acc)
             print(mean_acc_s)
             acc_matrix.append(clients_accuracies)
