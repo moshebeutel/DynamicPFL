@@ -51,7 +51,6 @@ def mean_norm_of_rows(t: torch.Tensor) -> float:
 
 args = parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
-
 num_clients = args.num_clients
 # >>>  ***GEP
 num_public_clients = args.num_public_clients
@@ -63,6 +62,7 @@ gradient_history_size = args.history_size
 local_epoch = args.local_epoch
 global_epoch = args.global_epoch
 batch_size = args.batch_size
+global_lr = args.global_lr
 pub_batch_size = 64
 target_epsilon = args.target_epsilon
 target_delta = args.target_delta
@@ -116,6 +116,9 @@ def local_update(model, dataloader):
     # model = model.to(device)
     optimizer = optim.Adam(params=model.parameters(), lr=args.lr)
     loss_fn = nn.CrossEntropyLoss()
+
+
+
     total_loss = 0.0
     for _ in range(local_epoch):
         for data, labels in dataloader:
@@ -127,9 +130,21 @@ def local_update(model, dataloader):
             optimizer.step()
             total_loss += float(loss)
             del data, labels, loss, outputs
-    gc.collect()
+
+
+
+
+
+
+
+
+
+
+
+
+
     # model = model.to('cpu')
-    # torch.cuda.empty_cache()
+    gc.collect()
     return model.state_dict(), total_loss / local_epoch
 
 
@@ -138,8 +153,14 @@ def test(client_model, client_testloader):
     # client_model = client_model.to(device)
 
     num_data = 0
-
     correct = 0
+
+
+
+
+
+
+
     with torch.no_grad():
         for data, labels in client_testloader:
             data, labels = data.to(device), labels.to(device)
@@ -148,11 +169,14 @@ def test(client_model, client_testloader):
             correct += (predicted == labels).sum().item()
             num_data += labels.size(0)
 
+
+
+
+
     accuracy = 100.0 * correct / num_data
-
     # client_model = client_model.to('cpu')
-
     return accuracy
+
 
 class AugStackTransform(v2.Transform):
     def __init__(self, multiplicity: int):
@@ -172,19 +196,11 @@ class AugStackTransform(v2.Transform):
 
 
 
-
-
-
-
-
 def main():
-    # enable memory history, which will
-    # add tracebacks and event history to snapshots
-    # torch.cuda.memory._record_memory_history()
-
     best_acc = 0.0
     mean_acc_s = []
     acc_matrix = []
+
     if dataset == 'MNIST':
         train_dataset, test_dataset = get_mnist_datasets()
         clients_train_set = get_clients_datasets(train_dataset, num_clients)
@@ -213,6 +229,12 @@ def main():
     else:
         print('undifined dataset')
         assert 1 == 0
+
+
+
+
+
+
 
     # global_model.to(device)
     base_epoch = 0
@@ -257,6 +279,7 @@ def main():
         noise_multiplier_residual = noise_multiplier if args.noise_multiplier_residual == 0 else args.noise_multiplier_residual
         # <<< *** GEP
 
+
     # >>> *** GEP
     def get_aux_dataset(num_virtual_clients: int, original_public_loaders: List[DataLoader]) -> DataLoader:
         public_data_list, public_label_list = [], []
@@ -296,7 +319,6 @@ def main():
     # public_clients_loader, cutmix_or_mixup = get_aux_dataset(num_virtual_clients=num_virtual_public_clients,
     #                                         original_public_loaders=clients_train_loaders[:num_public_clients])
 
-    # allocate all GPU memory needed for history
     basis_gradients: Optional[torch.Tensor] = None
     basis_gradients_cpu: Optional[torch.Tensor] = None
 
@@ -363,9 +385,9 @@ def main():
 
             optimizer.step()
 
-            to_erase= (data, labels, loss, outputs)
-            to_erase = (obj.detach().cpu() for obj in to_erase)
-            del data, labels, loss, outputs, to_erase
+
+            data, labels, loss, outputs = data.cpu(), labels.cpu(), loss.cpu(), outputs.cpu()
+            del data, labels, loss, outputs
         public_client_model.cpu()
         del public_client_model
         gc.collect()
@@ -578,8 +600,7 @@ def main():
         clean_reconstruction_list = []
 
         offset = 0
-        group_centers = []
-        group_scales = []
+
         for i, num_param in enumerate(num_param_list):
             grad_group = private_grads[:, offset:offset + num_param]
             assert grad_group.shape == (sampled_client_num, num_param), \
@@ -588,13 +609,6 @@ def main():
 
             pca = pca_for_group[i]
 
-            # mx, _ = torch.max(grad_group, dim=0, keepdim=True)
-            # mn, _ = torch.min(grad_group, dim=0, keepdim=True)
-            # translate_transform = mn
-            # scale_transform = torch.max(torch.tensor(.000001), mx - mn)
-            # grad_group = (grad_group - translate_transform) / scale_transform
-            # group_centers.append(translate_transform)
-            # group_scales.append(scale_transform)
             embedded_grads_group:torch.Tensor = embed_grad(grad_group, pca, device)
             assert embedded_grads_group.shape[0] == sampled_client_num, (f'Expected group embedding'
                                                                          f' with {sampled_client_num} rows.'
@@ -702,7 +716,6 @@ def main():
 
         # clip residuals
         residual_update_norms = norm_of_rows(projection_residual)
-        # residual_update_norms = torch.linalg.norm(residual_update,  dim=-1)
         residual_clip_factor = torch.max(torch.ones_like(residual_update_norms),
                                          residual_update_norms / clipping_bound_residual)
         residual_update_clipped = torch.div(projection_residual, residual_clip_factor.reshape(-1, 1))
@@ -727,17 +740,8 @@ def main():
             noised_embedded_grad_group = noised_embedded_grads[:, offset:offset + num_bases]
             pca = pca_for_group[i]
 
-            # mx, _ = torch.max(noised_embedded_grad_group, dim=0, keepdim=True)
-            # mn, _ = torch.min(noised_embedded_grad_group, dim=0, keepdim=True)
-            # noised_translate_transform = mn
-            # noised_scale_transform = torch.max(torch.tensor(.000001), mx - mn)
-            # noised_embedded_grad_group = (noised_embedded_grad_group - noised_translate_transform) / noised_scale_transform
-            #
-            # scale_transform=group_scales[i]
-            # translate_transform=group_centers[i]
-            reconstruction_group = project_back_embedding(noised_embedded_grad_group, pca, device)
 
-            # reconstruction_group = (reconstruction_group * scale_transform) + translate_transform
+            reconstruction_group = project_back_embedding(noised_embedded_grad_group, pca, device)
 
             assert reconstruction_group.shape == (sampled_client_num, num_param_list[i]), \
                 (f'Expected a reconstructed to {num_param_list[i]}-D group gradient row vector for each sampled client,'
@@ -872,40 +876,9 @@ def main():
                 'cosine_reconstruction_noise_residual_noise': cosine_reconstruction_noise_residual_noise,
                 'cosine_clean_reconstruction_residual_noise': cosine_clean_reconstruction_residual_noise})
 
-            # hlog_dict.update({'norm_pca_components' : float(torch.sqrt(sqrd_norm_pca_components.mean(0))),
-            #             'norm_pca_features': float(torch.sqrt(sqrd_norm_pca_features.mean(0)))})
             for (th, lst) in num_components_explained_variance_ratio_lists_dict.items():
                 hlog_dict.update({f'explained_variance_elmes_over_{th}': sum(lst)})
 
-            # log_dict = {'argmax_featurse_pca' : argmax_features,
-            #             'max_features_pca': max_features,
-            #             'argmax_componentes_pca': argmax_components,
-            #             'max_components_pca': max_components,
-            #             'grads_outliars_num': outliars_ammount,
-            #             'grads_norm_mean': grad_norms_mean,
-            #             'grads_norm_max': grad_norms_max,
-            #             'grads_norm_min': grad_norms_min,
-            #             'grads_norm_std': grad_norms_std,
-            #             'noised_grads_norm_mean': noised_grads_norm_mean,
-            #             'residual_norm_mean': residual_norm_mean,
-            #             'embedded_norm_mean': embedded_norm_mean,
-            #             'reconstructed_norm_mean': reconstructed_norm_mean,
-            #             'clean_reconstructed_norm_mean': clean_reconstruction_norm_mean,
-            #             'cosine_reconstruction_clean': cosine_reconstruction_clean,
-            #             'cosine_reconstruction_noise': cosine_reconstruction_noise,
-            #             'grad_clip_factor_mean' : float(grad_clip_factor.mean()),
-            #             'grad_clip_factor_min' : float(grad_clip_factor.min()),
-            #             'grad_clip_factor_max' : float(grad_clip_factor.max()),
-            #             'residual_clip_factor_mean' : float(residual_clip_factor.mean()),
-            #             'residual_clip_factor_min' : float(residual_clip_factor.min()),
-            #             'residual_clip_factor_max' : float(residual_clip_factor.max()),
-            #             'grads_squared_norms_reconstruction_diff_max': float(reconstruction_diff.max()),
-            #             'grads_squared_norms_reconstruction_diff_min': float(reconstruction_diff.min()),
-            #             'grads_squared_norms_reconstruction_diff_mean': float(reconstruction_diff.mean()),
-            #             'grads_squared_norms_reconstruction_diff_std': float(reconstruction_diff.std()),
-            #             }
-
-            # wandb.log(log_dict, step=epoch)
             wandb.log(hlog_dict, step=epoch)
 
 
@@ -946,8 +919,8 @@ def main():
         aggregated_residuals=aggregated_residuals.cpu()
         for n, p in prev_params.items():
             new_params[n] = (p +
-                             aggregated_update[offset: offset + p.numel()].reshape(p.shape) +
-                             aggregated_residuals[offset: offset + p.numel()].reshape(p.shape))
+                             global_lr * (aggregated_update[offset: offset + p.numel()].reshape(p.shape) +
+                             aggregated_residuals[offset: offset + p.numel()].reshape(p.shape)))
             offset += p.numel()
         # update new parameters of global net
         global_model.load_state_dict(new_params)

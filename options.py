@@ -62,6 +62,7 @@ def parse_args():
     parser.add_argument('--device', type=int, default=0, help='Set the visible CUDA device for calculations')
 
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
+    parser.add_argument('--global-lr', type=float, default=0.5, help="learning rate at server")
 
     parser.add_argument('--no_clip', action='store_true')
     parser.add_argument('--no_noise', action='store_true')
