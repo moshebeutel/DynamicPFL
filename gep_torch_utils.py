@@ -20,22 +20,23 @@ def flatten_tensor(tensor_list) -> torch.Tensor:
     Taken from https://github.com/dayu11/Gradient-Embedding-Perturbation
     """
     for i in range(len(tensor_list)):
-        # tensor_list[i] = tensor_list[i].reshape([tensor_list[i].shape[0], -1])
-        tensor_list[i] = tensor_list[i].reshape(1, -1)
-    flatten_param = torch.cat(tensor_list, dim=1)
-    del tensor_list
-    return flatten_param
-
-def flatten_tensor1(tensor_list) -> torch.Tensor:
-    """
-    Taken from https://github.com/dayu11/Gradient-Embedding-Perturbation
-    """
-    for i in range(len(tensor_list)):
         tensor_list[i] = tensor_list[i].reshape([tensor_list[i].shape[0], -1])
         # tensor_list[i] = tensor_list[i].reshape(1, -1)
     flatten_param = torch.cat(tensor_list, dim=1)
     del tensor_list
     return flatten_param
+
+
+# def flatten_tensor1(tensor_list) -> torch.Tensor:
+#     """
+#     Taken from https://github.com/dayu11/Gradient-Embedding-Perturbation
+#     """
+#     for i in range(len(tensor_list)):
+#         tensor_list[i] = tensor_list[i].reshape([tensor_list[i].shape[0], -1])
+#         # tensor_list[i] = tensor_list[i].reshape(1, -1)
+#     flatten_param = torch.cat(tensor_list, dim=1)
+#     del tensor_list
+#     return flatten_param
 
 
 @torch.no_grad()
@@ -103,8 +104,8 @@ def get_bases(pub_grad, num_bases):
 
     mean = torch.mean(pub_grad, dim=0, keepdim=True)
     std = torch.std(pub_grad, dim=0, keepdim=True)
-    mx,_ = torch.max(pub_grad, dim=0, keepdim=True)
-    mn,_ = torch.min(pub_grad, dim=0, keepdim=True)
+    mx, _ = torch.max(pub_grad, dim=0, keepdim=True)
+    mn, _ = torch.min(pub_grad, dim=0, keepdim=True)
 
     # translate_transform = mn
     translate_transform = float(mn.mean())
@@ -114,7 +115,6 @@ def get_bases(pub_grad, num_bases):
 
     # U, S, V = torch.pca_lowrank(X, q=num_bases, niter=2, center=True)
     _, S, Vh = torch.linalg.svd(X, full_matrices=False)
-
 
     if torch.any(torch.isnan(Vh)):
         raise Exception(
@@ -134,25 +134,23 @@ def get_bases(pub_grad, num_bases):
         over_th_idx = over_th[0] if len(over_th) > 0 else len(explained_variance_ratio_cumsum) - 1
         num_components_explained_variance_ratio_dict[th] = int(over_th_idx)
 
-
     # pca = torch.linalg.qr(pub_grad.t())
     # print(f'Q shape {pca[0].shape}')
     # print(f'R shape {pca[1].shape}')
 
-    S=S.cpu()
-    explained_variance_=explained_variance_.cpu()
-    explained_variance_ratio_=explained_variance_ratio_.cpu()
-    explained_variance_ratio_cumsum=explained_variance_ratio_cumsum.cpu()
-    del S,explained_variance_,explained_variance_ratio_, explained_variance_ratio_cumsum
+    S = S.cpu()
+    explained_variance_ = explained_variance_.cpu()
+    explained_variance_ratio_ = explained_variance_ratio_.cpu()
+    explained_variance_ratio_cumsum = explained_variance_ratio_cumsum.cpu()
+    del S, explained_variance_, explained_variance_ratio_, explained_variance_ratio_cumsum
 
     gc.collect()
     torch.cuda.empty_cache()
 
     # The principal directions are the transpose of Vh
-    V = Vh.t()[:,:num_bases]
+    V = Vh.t()[:, :num_bases]
 
     return V, translate_transform, scale_transform, num_components_explained_variance_ratio_dict
-
 
 
 @torch.no_grad()
@@ -162,7 +160,7 @@ def embed_grad(grad: torch.Tensor, pca, device=torch.device('cuda')) -> torch.Te
     V, translate_transform, scale_transform, _ = pca
     # V, grad = V.to(device), grad.to(device)
     with torch.amp.autocast('cuda', enabled=False):
-        grad =  (grad - translate_transform) / scale_transform
+        grad = (grad - translate_transform) / scale_transform
         embedding: torch.Tensor = torch.matmul(grad, V)
 
     if torch.any(torch.isnan(embedding)):
@@ -170,6 +168,7 @@ def embed_grad(grad: torch.Tensor, pca, device=torch.device('cuda')) -> torch.Te
             f'NaNs in embedding: {torch.sum(torch.any(torch.isnan(embedding)))} NaNs')
     # V, grad, embedding = V.detach().cpu(), grad.detach().cpu(), embedding.detach().cpu()
     return embedding
+
 
 @torch.no_grad()
 def project_back_embedding(embedding: torch.Tensor, pca, device) -> torch.Tensor:
@@ -192,9 +191,9 @@ def project_back_embedding(embedding: torch.Tensor, pca, device) -> torch.Tensor
 
 @torch.no_grad()
 def compute_subspace(basis_gradients: torch.Tensor, num_basis_elements: int, device=torch.device('cuda')):
-
     pca = get_bases(basis_gradients, num_basis_elements)
     return pca
+
 
 #  End of GEP UTILS  torch variants
 #  *************************
@@ -215,11 +214,10 @@ def add_new_gradients_to_history(new_gradients: torch.Tensor,
         if gradients_history_size < basis_gradients_cpu.shape[0] \
         else basis_gradients_cpu
 
-        # print(f'\n\t\t\t\t\t\t\t\t3 - basis gradients shape {basis_gradients.shape}')
+    # print(f'\n\t\t\t\t\t\t\t\t3 - basis gradients shape {basis_gradients.shape}')
 
     basis_gradients = basis_gradients_cpu.to('cuda', non_blocking=True)
 
     filled_history_size = basis_gradients_cpu.shape[0]
 
     return basis_gradients, basis_gradients_cpu, filled_history_size
-

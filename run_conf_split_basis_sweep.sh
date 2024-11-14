@@ -5,7 +5,7 @@ SAMPLE_RATE=0.02       # Sample and aggregate 10 clients each iteration
 #SAMPLE_RATE=0.03      # Sample and aggregate 15 clients each iteration
 #SAMPLE_RATE=0.04      # Sample and aggregate 20 clients each iteration
 #SAMPLE_RATE=0.06      # Sample and aggregate 30 clients each iteration
-EPOCHS=100             # number of federated iterations
+EPOCHS=192              # number of federated iterations
 DATASET="CIFAR10"
 DELTA=0.002           # 1/500
 
@@ -19,6 +19,8 @@ fi
 # Store the argument in a variable
 GPU="$1"
 NOISE_MULTIPLIER="$2"
+GLOBAL_LR="$3"
+LR="$4"
 SEED=43
 
 LOCAL_EPOCHS=5         # Each client iterate  times over all his local data
@@ -27,7 +29,7 @@ LOCAL_EPOCHS=5         # Each client iterate  times over all his local data
 echo GPU "$GPU" SEED "$SEED" LOCAL_EPOCHS "${LOCAL_EPOCHS}"
 
 
-EVAL_AFTER=10
+EVAL_AFTER=20
 EVAL_EVERY=5
 LOG_EVERY=10
 #BASIS_SIZE=400
@@ -61,9 +63,9 @@ echo CLIPPING_BOUND "${CLIPPING_BOUND}"
 echo CLIPPING_BOUND_RESIDUAL "${CLIPPING_BOUND_RESIDUAL}"
 
 
-basis_size_list=(50 1100)
-history_size_list=(1200)
-virtual_publics_list=(10)
+basis_size_list=(50)
+history_size_list=(2000)
+virtual_publics_list=(200 100)
 
 
 #=
@@ -99,7 +101,7 @@ for virtual_publics in "${virtual_publics_list[@]}"; do
 
 
 
-      EXP_NAME=virtual_"${VIRTUAL_PUBLICS}"_basis_"${BASIS_SIZE}"_history_"${HISTORY_SIZE}"_noise_grad"${NOISE_MULTIPLIER_GRAD}"_noise_res_"${NOISE_MULTIPLIER_RESIDUAL}"_clip_"${CLIPPING_BOUND}"_clip_res_"${CLIPPING_BOUND_RESIDUAL}"_seed_"${SEED}"_epochs_"${EPOCHS}"_local_epochs"${LOCAL_EPOCHS}"
+      EXP_NAME=global_lr_"${GLOBAL_LR}"_virtual_"${VIRTUAL_PUBLICS}"_basis_"${BASIS_SIZE}"_history_"${HISTORY_SIZE}"_noise_grad"${NOISE_MULTIPLIER_GRAD}"_noise_res_"${NOISE_MULTIPLIER_RESIDUAL}"_clip_"${CLIPPING_BOUND}"_clip_res_"${CLIPPING_BOUND_RESIDUAL}"_seed_"${SEED}"_epochs_"${EPOCHS}"_local_epochs"${LOCAL_EPOCHS}"
       EXP_NAME=GEP_RES_"${EXP_NAME}"
 
       LOG_FOLDER="logs/${DATASET}_${EXP_NAME}"
@@ -129,6 +131,8 @@ for virtual_publics in "${virtual_publics_list[@]}"; do
              --noise_multiplier_residual "${NOISE_MULTIPLIER_RESIDUAL}"
              --eval-after "${EVAL_AFTER}"
              --eval-every "${EVAL_EVERY}"
+             --global-lr "${GLOBAL_LR}"
+             --lr "${LR}"
              --log-every "${LOG_EVERY}"
              --exp-name "${EXP_NAME}"
             )
@@ -138,7 +142,7 @@ for virtual_publics in "${virtual_publics_list[@]}"; do
 
       echo  ${DATASET} FedAvg GEP RESIDUAL VIRTUAL SINGLE LOADER  with arguments "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"
       CUDA_VISIBLE_DEVICES=$GPU python main_base_gep_gp.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"
-      #   CUDA_VISIBLE_DEVICES=$GPU python main_base_gep_gp.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"  >> "${LOG_FOLDER}"/FedAvgGep_"${EXP_NAME}".txt
+      #   CUDA_VISIBLE_DEVICES=$GPU python main_base_gep_virtual_public_single_loader_groups.py "${ARGUMENTS[@]}" "${GEP_ARGUMENTS[@]}"  >> "${LOG_FOLDER}"/FedAvgGep_"${EXP_NAME}".txt
     done
   done
 done

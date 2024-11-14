@@ -34,7 +34,7 @@ def parse_args():
     # >>> ***GEP
     parser.add_argument('--num_public_clients', type=int, default=10,
                         help="Number of public clients for gradient embedding subspace compute")
-    parser.add_argument('--virtual_publics', type=int, default=500,
+    parser.add_argument('--virtual_publics', type=int, default=64,
                         help="Number of virtual public clients for gradient embedding subspace compute")
     parser.add_argument('--basis_size', type=int, default=360, help="Embedding subspace basis size")
     parser.add_argument('--history_size', type=int, default=500, help="Previous Gradients used to"
@@ -57,6 +57,7 @@ def parse_args():
     parser.add_argument('--device', type=int, default=0, help='Set the visible CUDA device for calculations')
 
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
+    parser.add_argument('--global-lr', type=float, default=0.5, help="learning rate at server")
 
     parser.add_argument('--no_clip', action='store_true')
     parser.add_argument('--no_noise', action='store_true')
@@ -78,7 +79,7 @@ def parse_args():
     parser.add_argument("--log-every", type=int, default=10, help="log every X selected epochs")
     parser.add_argument("--eval-after", type=int, default=50, help="eval only after X selected epochs")
 
-    parser.add_argument('--wandb', type=bool, default=False)
+    parser.add_argument('--wandb', type=bool, default=True)
 
     parser.add_argument('--exp-name', type=str, default='')
     #############################

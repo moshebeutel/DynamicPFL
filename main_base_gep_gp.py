@@ -20,13 +20,16 @@ from data import get_mnist_datasets, get_clients_datasets, get_CIFAR10, get_SVHN
 from emg_utils import get_dataloaders
 # >>>  ***GEP
 from gep_torch_utils import (compute_subspace, embed_grad, flatten_tensor,
-                             project_back_embedding, add_new_gradients_to_history, flatten_tensor1)
+                             project_back_embedding, add_new_gradients_to_history)
 from net import mnistNet, cifar10NetGPkernel, SVHNNet, EMGModel, save_checkpoint, load_checkpoint
 from options import parse_args
 from utils import compute_noise_multiplier
 # <<< ***GEP
 from pFedGP.pFedGP.Learner import pFedGPFullLearner
 from gp_utils import build_tree
+
+from torch.func import functional_call, vmap, grad
+
 
 
 def norm_of_rows_squared(t: torch.Tensor) -> torch.Tensor:
@@ -96,6 +99,7 @@ if args.store == True:
         , 'a'
     )
     sys.stdout = file
+
 
 def filter_outliar_grads(grads: torch.Tensor, z_thresh: float = 3.0) -> Tensor:
     assert grads.dim() == 2, f'Expected a 2D Tensor, got {grads.dim()}'
@@ -281,8 +285,9 @@ def main():
     GPs = torch.nn.ModuleList([])
     for client_id in range(num_clients):
         GPs.append(pFedGPFullLearner(args, classes_per_client).to(device))
-    GPs.append(pFedGPFullLearner(args, classes_per_client).to(device)) # gp learner for public data
+    GPs.append(pFedGPFullLearner(args, classes_per_client).to(device))  # gp learner for public data
     public_gp_idx = -1
+
     # >>> ***GEP
     def get_aux_dataset(num_virtual_clients: int, original_public_loaders: List[DataLoader]) -> DataLoader:
         public_data_list, public_label_list = [], []
@@ -347,20 +352,26 @@ def main():
             prev_params[n] = p.detach()
 
         public_client_model = cifar10NetGPkernel()
-
-        public_client_model.to(device)
-        GPs[public_gp_idx], label_map, _, _ = build_tree(public_client_model, public_clients_loader, public_gp_idx, GPs)
-        public_client_model = extend(public_client_model)
-        GPs[public_gp_idx].train()
         public_client_model.load_state_dict(global_model.state_dict())
+        public_client_model.train()
+        public_client_model = extend(public_client_model, use_converter=True)
+        public_client_model.to(device)
+
+        # params = {k: v.detach() for k, v in public_client_model.named_parameters()}
+        # buffers = {k: v.detach() for k, v in public_client_model.named_buffers()}
+
+        # GPs[public_gp_idx], label_map, _, _ = build_tree(public_client_model, public_clients_loader, public_gp_idx, GPs)
+        # # GPs[public_gp_idx] = extend(GPs[public_gp_idx])
+        # GPs[public_gp_idx].train()
+
         optimizer = optim.Adam(params=public_client_model.parameters(), lr=args.lr)
-        optimizer.zero_grad()
-        # loss_fn = nn.CrossEntropyLoss()
-        # loss_fn = extend(loss_fn)
+        loss_fn = nn.CrossEntropyLoss()
+        loss_fn = extend(loss_fn)
         num_pub_samples = 0
         pub_data_list, public_label_list = [], []
         for k, (data, labels) in enumerate(public_clients_loader):
             data, labels = data.to(device), labels.to(device)
+            labels = (labels * 6.4).long()
             pub_data_list.append(data)
             public_label_list.append(labels)
             # with torch.no_grad():
@@ -369,75 +380,130 @@ def main():
             # current_batch_size = labels.size(0)
             # num_pub_samples += current_batch_size
             # print(f'data shape: {data.shape}')
+            public_client_model.load_state_dict(global_model.state_dict())
 
+            optimizer.zero_grad()
 
             outputs = public_client_model(data)
+
+            loss = loss_fn(outputs, labels)
 
             if torch.any(torch.isnan(outputs)):
                 raise Exception(f'NaNs in model output')
 
-            X = torch.cat((X, outputs), dim=0) if k > 0 else outputs
-            Y = torch.cat((Y, labels), dim=0) if k > 0 else labels
+            with backpack(BatchGrad()):
+                loss.backward()
+
+            for n, p in public_client_model.named_parameters():
+                public_clients_model_updates[n].extend(p.grad_batch.detach().cpu())
+                # public_clients_model_updates_not_used[n].append(p.grad.detach())
+                p.grad_batch.cpu()
+                del p.grad_batch, p.grad
+
+            optimizer.step()
+
+            # X = torch.cat((X, outputs), dim=0) if k > 0 else outputs
+            # Y = torch.cat((Y, labels), dim=0) if k > 0 else labels
             # Y = torch.cat((Y, torch.argmax(labels, dim=-1)), dim=0) if k > 0 else torch.argmax(labels, dim=-1)
             data, labels, outputs = data.cpu(), labels.cpu(), outputs.cpu()
             del data, labels, outputs
 
-        # Define the  number of rows per split
-        num_splits = num_virtual_public_clients
+        # GPs[public_gp_idx], label_map, _, _ = build_tree(public_client_model,
+        #                                                  public_clients_loader,
+        #                                                  public_gp_idx,
+        #                                                  GPs)
+        # GPs[public_gp_idx].train()
 
-        # Calculate the number of splits
+
+        # offset_labels = torch.tensor([label_map[torch.argmax(Y[i]).item()]
+        #                               for i in range(len(Y))], dtype=Y.dtype,
+        #                              device=Y.device)
+        # offset_labels = torch.tensor([label_map[Y[i].item()]
+        #                               for i in range(len(Y))], dtype=Y.dtype,
+        #                              device=Y.device)
+        # GPs[public_gp_idx].to(device)
+        # loss = GPs[public_gp_idx](X, offset_labels, to_print=args.eval_every)
+
+        # def loss_fn(X, Y):
+        #     offset_labels = torch.tensor([label_map[Y[i].item()]
+        #                                   for i in range(len(Y))], dtype=Y.dtype,
+        #                                  device=Y.device)
+        #     return GPs[public_gp_idx](X, offset_labels, to_print=args.eval_every)
+        #
+        # def compute_loss(params, buffers, sample, target):
+        #     batch = sample.unsqueeze(0)
+        #     targets = target.unsqueeze(0)
+        #
+        #     X = functional_call(public_client_model, (params, buffers), (batch,))
+        #     loss = loss_fn(X, targets)
+        #     return loss
+        #
+        # ft_compute_grad = grad(compute_loss)
+        # ft_compute_sample_grad = vmap(ft_compute_grad, in_dims=(None, None, 0, 0))
+        # ft_per_sample_grads = ft_compute_sample_grad(params, buffers, data, targets)
+        # for per_sample_grad, ft_per_sample_grad in zip(ft_per_sample_grads, ft_per_sample_grads.values()):
+        #     assert torch.allclose(per_sample_grad, ft_per_sample_grad, atol=3e-3, rtol=1e-5)
+
+        # with backpack(BatchGrad()):
+        #     loss.backward()
+        #
+        # for n, p in public_client_model.named_parameters():
+        #     public_clients_model_updates[n].extend(p.grad_batch.detach().cpu())
+        #     # public_clients_model_updates_not_used[n].append(p.grad.detach())
+        #     p.grad_batch.cpu()
+        #     del p.grad_batch, p.grad
+
+        # optimizer.step()
+
+        # public_grads_list = [torch.stack(public_clients_model_updates[n]) for n, p in global_model.named_parameters()]
+        # public_grads_flat = flatten_tensor(public_grads_list)
+        #
+        # # Define the  number of rows per split
+        # num_splits = num_virtual_public_clients
+        #
+        # # Calculate the number of splits
+        # # rows_per_split = int(public_grads_flat.size(0)) // num_splits
+        # # rows_per_split = int(X.size(0)) // num_splits
         # rows_per_split = int(public_grads_flat.size(0)) // num_splits
-        rows_per_split = int(X.size(0)) // num_splits
-
-        # Reshape the tensor to (num_splits, rows_per_split, n) and calculate the mean along the rows
+        #
+        # # Reshape the tensor to (num_splits, rows_per_split, n) and calculate the mean along the rows
+        # # public_virtual_grads = public_grads_flat[:num_splits * rows_per_split].reshape(num_splits, rows_per_split,
+        # #                                                                                -1).mean(dim=1)
+        # # public_virtual_X = X[:num_splits * rows_per_split].reshape(num_splits, rows_per_split, -1).mean(dim=1)
+        # # public_virtual_X = X[:num_splits * rows_per_split].reshape(num_splits, rows_per_split, X.shape[-1])
+        # # public_virtual_Y = Y[:num_splits * rows_per_split].reshape(num_splits, rows_per_split).float().mean(
+        # #     dim=1).long()
+        #
         # public_virtual_grads = public_grads_flat[:num_splits * rows_per_split].reshape(num_splits, rows_per_split,
         #                                                                                -1).mean(dim=1)
+        #
+        # # Handle the remaining rows (4360 % 500 != 0)
+        # # if X.size(0) % rows_per_split != 0:
+        # #     remaining_rows_X = X[num_splits * rows_per_split:]
+        # #     remaining_rows_Y = Y[num_splits * rows_per_split:]
+        # #     public_virtual_X = torch.cat([public_virtual_X, remaining_rows_X], dim=0)
+        # #     public_virtual_Y = torch.cat([public_virtual_Y, remaining_rows_Y], dim=0)
+        #
+        # if public_grads_flat.size(0) % rows_per_split != 0:
+        #     remaining_mean = public_grads_flat[num_splits * rows_per_split:].mean(dim=0, keepdim=True)
+        #     public_virtual_grads = torch.cat([public_virtual_grads, remaining_mean], dim=0)
 
-        public_virtual_X = X[:num_splits * rows_per_split].reshape(num_splits, rows_per_split)
-        public_virtual_Y = Y[:num_splits * rows_per_split].reshape(num_splits, rows_per_split)
+        # for n, p in public_client_model.named_parameters():
+        #     # assert p.grad_batch.shape[0] == current_batch_size, f'Expected {current_batch_size} per sample grads'
+        #     # assert p.grad_batch.numel() == current_batch_size * p.numel(), f'Expected {current_batch_size}*{p.numel()} per sample grads elements'
+        #
+        #     # public_clients_model_updates[n].extend(p.grad_batch.detach().cpu())
+        #     public_clients_model_updates[n].extend(p.grad.detach().cpu())
+        #     # public_clients_model_updates_not_used[n].append(p.grad.detach())
+        #     # p.grad_batch.cpu()
+        #     # del p.grad_batch, p.grad
+        #     del p.grad
 
-        # Handle the remaining rows (4360 % 500 != 0)
-        if X.size(0) % rows_per_split != 0:
-            remaining_rows_X = X[num_splits * rows_per_split:]
-            remaining_rows_Y = Y[num_splits * rows_per_split:]
-            public_virtual_X = torch.cat([public_virtual_X, remaining_rows_X], dim=0)
-            public_virtual_Y = torch.cat([public_virtual_Y, remaining_rows_Y], dim=0)
+        # optimizer.step()
 
-        for i in range(public_virtual_X.shape[0]):
+        # X, Y, loss = X.cpu(), Y.cpu(), loss.cpu()
+        # del X, Y, loss
 
-            GPs[public_gp_idx], label_map, _, _ = build_tree(public_client_model, public_clients_loader, public_gp_idx,
-                                                             GPs)
-            public_client_model = extend(public_client_model)
-            GPs[public_gp_idx].train()
-
-            X = public_virtual_X[i]
-            Y = public_virtual_Y[i]
-
-            offset_labels = torch.tensor([label_map[l.item()] for l in Y], dtype=Y.dtype, device=Y.device)
-            # offset_labels = torch.tensor([label_map[torch.argmax(Y[i]).item()] for i in range(len(Y))], dtype=Y.dtype, device=Y.device)
-            # GPs[public_gp_idx].to(device)
-            loss = GPs[public_gp_idx](X, offset_labels, to_print=args.eval_every)
-
-            loss.backward()
-
-            # with backpack(BatchGrad()):
-            #     loss.backward()
-
-            for n, p in public_client_model.named_parameters():
-                # assert p.grad_batch.shape[0] == current_batch_size, f'Expected {current_batch_size} per sample grads'
-                # assert p.grad_batch.numel() == current_batch_size * p.numel(), f'Expected {current_batch_size}*{p.numel()} per sample grads elements'
-
-                # public_clients_model_updates[n].extend(p.grad_batch.detach().cpu())
-                public_clients_model_updates[n].extend(p.grad.detach().cpu())
-                # public_clients_model_updates_not_used[n].append(p.grad.detach())
-                # p.grad_batch.cpu()
-                # del p.grad_batch, p.grad
-                del p.grad
-
-            optimizer.step()
-
-        X, Y, loss= X.cpu(), Y.cpu(), loss.cpu()
-        del X, Y, loss
         public_client_model.cpu()
         del public_client_model
         gc.collect()
@@ -447,10 +513,32 @@ def main():
         public_grads_flat = flatten_tensor(public_grads_list)
         assert public_grads_flat.dim() == 2, f'Expected flat grads per sample'
         # assert public_grads_flat.shape[0] == num_pub_samples, f'Expected grad per sample'
-        assert public_grads_flat.shape[1] == num_trainable_params, f'Expected {num_trainable_params} element per grad'
+        assert public_grads_flat.shape[1] == num_trainable_params,\
+            f'Expected {num_trainable_params} element per grad'
+
+        # assert public_grads_flat.shape[1] == num_trainable_params, f'Expected {num_trainable_params} element per grad'
         assert public_grads_flat.device == torch.device(
             'cpu'), f'Expected public_grads_flat.device cpu, got {public_grads_flat.device}'
         public_grads_flat = public_grads_flat.squeeze()
+        # Define the  number of rows per split
+        num_splits = num_virtual_public_clients
+
+        # Calculate the number of splits
+        # rows_per_split = int(public_grads_flat.size(0)) // num_splits
+        rows_per_split = 1
+
+        # Reshape the tensor to (num_splits, rows_per_split, n) and calculate the mean along the rows
+        public_virtual_grads = public_grads_flat[:num_splits * rows_per_split].reshape(num_splits, rows_per_split,
+                                                                                       -1).mean(dim=1)
+
+        # Handle the remaining rows (4360 % 500 != 0)
+        if public_grads_flat.size(0) % rows_per_split != 0:
+            remaining_mean = public_grads_flat[num_splits * rows_per_split:].mean(dim=0, keepdim=True)
+            public_virtual_grads = torch.cat([public_virtual_grads, remaining_mean], dim=0)
+
+        # public_grads_list = [torch.stack(public_clients_model_updates[n]) for n, p in global_model.named_parameters()]
+        # public_grads_flat = flatten_tensor(public_grads_list)
+
         # # Define the number of rows per split
         # num_splits = num_virtual_public_clients
         #
@@ -469,9 +557,13 @@ def main():
         # #     remaining_mean = public_grads_flat[num_splits * rows_per_split:].mean(dim=0, keepdim=True)
         # #     public_virtual_grads = torch.cat([public_virtual_grads, remaining_mean], dim=0)
 
-        assert public_virtual_grads.device==torch.device('cpu'), f'Expected public_virtual_grads.device cpu , got {public_virtual_grads.device}'
+        assert public_virtual_grads.device == torch.device(
+            'cpu'), f'Expected public_virtual_grads.device cpu , got {public_virtual_grads.device}'
 
-        basis_gradients, basis_gradients_cpu, filled_history_size = add_new_gradients_to_history(public_virtual_grads, basis_gradients, basis_gradients_cpu, gradient_history_size)
+        basis_gradients, basis_gradients_cpu, filled_history_size = add_new_gradients_to_history(public_virtual_grads,
+                                                                                                 basis_gradients,
+                                                                                                 basis_gradients_cpu,
+                                                                                                 gradient_history_size)
         assert basis_gradients.shape[0] <= gradient_history_size, (f'Expected history of {gradient_history_size} grads'
                                                                    f' at most,'
                                                                    f' got {basis_gradients.shape[0]}')
@@ -479,11 +571,12 @@ def main():
         #     f'Expected history of {num_trainable_params} entry grads'
 
         assert basis_gradients.device == device, f'Expected basis gradients device {device}, got {basis_gradients.device}'
-        assert basis_gradients_cpu.device == torch.device('cpu'), f'Expected basis_gradients_cpu device cpu, got {basis_gradients_cpu.device}'
+        assert basis_gradients_cpu.device == torch.device(
+            'cpu'), f'Expected basis_gradients_cpu device cpu, got {basis_gradients_cpu.device}'
 
-        public_grads_flat=public_grads_flat.cpu()
-        public_virtual_grads=public_virtual_grads.cpu()
-        public_grads_list=[pg.cpu() for pg in public_grads_list]
+        public_grads_flat = public_grads_flat.cpu()
+        public_virtual_grads = public_virtual_grads.cpu()
+        public_grads_list = [pg.cpu() for pg in public_grads_list]
         del public_grads_list, public_grads_flat, public_virtual_grads
         gc.collect()
         torch.cuda.empty_cache()
@@ -493,7 +586,7 @@ def main():
         pca_for_group = []
         num_components_explained_variance_ratio_lists_dict = {0.5: [], 0.75: [], 0.9: [], 0.95: []}
         for i, num_param in enumerate(num_param_list):
-            pub_grad:torch.Tensor = basis_gradients[:filled_history_size, offset:offset + num_param]
+            pub_grad: torch.Tensor = basis_gradients[:filled_history_size, offset:offset + num_param]
             offset += num_param
 
             num_bases = num_bases_list[i]
@@ -550,7 +643,7 @@ def main():
         grads_list = [torch.stack(clients_model_updates[n]) for n, p in global_model.named_parameters()]
 
         # flatten grads for clipping and noising
-        private_grads: torch.Tensor = flatten_tensor1(grads_list)  # cpu
+        private_grads: torch.Tensor = flatten_tensor(grads_list)  # cpu
         del grads_list
         assert private_grads.shape == (sampled_client_num, num_trainable_params), (f'Expected a gradient row vector'
                                                                                    f' for each sampled client,'
@@ -917,5 +1010,7 @@ def main():
         f'{torch.tensor(acc_matrix)}\n'
         f'===============================================================\n'
     )
+
+
 if __name__ == '__main__':
     main()
