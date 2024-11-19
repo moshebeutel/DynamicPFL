@@ -218,7 +218,7 @@ def main():
                                                                                      args.batch_size)
         # clients_models = [cifar10NetGPkernel() for _ in range(num_clients)]
         global_model = cifar10NetGPkernel()
-        classes_per_client = 10
+        classes_per_client = 2
     # elif dataset == 'FEMNIST':
     #     clients_train_loaders, clients_test_loaders, client_data_sizes = get_FEMNIST(num_clients)
     #     clients_models = [femnistNet() for _ in range(num_clients)]

@@ -2,9 +2,11 @@ from typing import Tuple, List
 from torch.utils.data import DataLoader
 from torch.utils.data import DataLoader, Subset, SubsetRandomSampler
 
+from partitioned_data_loader import gen_random_loaders
+
 
 #SVHN------------------------------------------------------------
-def get_SVHN(alpha: float, num_clients: int, batch_size:int) -> Tuple[List[DataLoader], List[DataLoader], List[int]]:
+def get_SVHN(alpha: float, num_clients: int, batch_size: int) -> Tuple[List[DataLoader], List[DataLoader], List[int]]:
     transform = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.ToTensor(),
@@ -49,7 +51,6 @@ def get_SVHN(alpha: float, num_clients: int, batch_size:int) -> Tuple[List[DataL
     return train_loaders, test_loaders, client_data_sizes
 
 
-
 #MNIST-------------------------------------------------------------------------------------------------------
 def get_mnist_datasets():
     transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
@@ -59,8 +60,8 @@ def get_mnist_datasets():
 
     return train_dataset, test_dataset
 
-def get_clients_datasets(train_dataset, num_clients):
 
+def get_clients_datasets(train_dataset, num_clients):
     n = len(train_dataset)
     indices = list(range(n))
     split_size = n // num_clients
@@ -74,52 +75,58 @@ def get_clients_datasets(train_dataset, num_clients):
     return clients_datasets
 
 
-
 from fedlab.utils.dataset.functional import hetero_dir_partition
 
 
-def get_CIFAR10(alpha: float, num_clients: int, batch_size: int) -> Tuple[List[DataLoader], List[DataLoader], List[int]]:
-    transform = transforms.Compose([
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomCrop(32, padding=4),
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ])
+def get_CIFAR10(alpha: float, num_clients: int, batch_size: int) -> Tuple[
+    List[DataLoader], List[DataLoader], List[int]]:
 
-    train_dataset = datasets.CIFAR10(root='./data/CIFAR10', train=True, download=True, transform=transform)
-    test_dataset = datasets.CIFAR10(root='./data/CIFAR10', train=False, download=True, transform=transform)
 
-    num_classes = len(np.unique(train_dataset.targets))
+    dataloaders = gen_random_loaders(data_name='cifar10', data_path='./data/CIFAR10', num_users=num_clients, bz=batch_size, classes_per_user=2)
+    train_data_sizes = [len(loader) * batch_size for loader in dataloaders[0]]
+    return dataloaders[0], dataloaders[1], train_data_sizes
 
-    train_partition = hetero_dir_partition(train_dataset.targets, num_clients, num_classes, alpha)
-
-    train_loaders = []
-    test_loaders = []
-    client_data_sizes = []
-
-    # Create a shared test_loader for all clients
-    shared_test_loader = DataLoader(test_dataset, batch_size=256, shuffle=True)
-
-    for i in range(num_clients):
-        train_sampler = torch.utils.data.SubsetRandomSampler(train_partition[i])
-
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, drop_last=True)
-
-        train_loaders.append(train_loader)
-        test_loaders.append(shared_test_loader)
-        client_data_sizes.append(len(train_partition[i]))
-
-        # Calculate and print label percentages for each client
-        label_counts = np.zeros(num_classes)
-        for idx in train_partition[i]:
-            label_counts[train_dataset.targets[idx]] += 1
-        label_percentages = label_counts / len(train_partition[i]) * 100
-
-        # print(f"Client {i}: Label Percentages:")
-        # for label, percentage in enumerate(label_percentages):
-        #     print(f"Label {label}: {percentage:.2f}%")
-
-    return train_loaders, test_loaders, client_data_sizes
+    # transform = transforms.Compose([
+    #     transforms.RandomHorizontalFlip(),
+    #     transforms.RandomCrop(32, padding=4),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    # ])
+    #
+    # train_dataset = datasets.CIFAR10(root='./data/CIFAR10', train=True, download=True, transform=transform)
+    # test_dataset = datasets.CIFAR10(root='./data/CIFAR10', train=False, download=True, transform=transform)
+    #
+    # num_classes = len(np.unique(train_dataset.targets))
+    #
+    # train_partition = hetero_dir_partition(train_dataset.targets, num_clients, num_classes, alpha)
+    #
+    # train_loaders = []
+    # test_loaders = []
+    # client_data_sizes = []
+    #
+    # # Create a shared test_loader for all clients
+    # shared_test_loader = DataLoader(test_dataset, batch_size=256, shuffle=True)
+    #
+    # for i in range(num_clients):
+    #     train_sampler = torch.utils.data.SubsetRandomSampler(train_partition[i])
+    #
+    #     train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, drop_last=True)
+    #
+    #     train_loaders.append(train_loader)
+    #     test_loaders.append(shared_test_loader)
+    #     client_data_sizes.append(len(train_partition[i]))
+    #
+    #     # Calculate and print label percentages for each client
+    #     label_counts = np.zeros(num_classes)
+    #     for idx in train_partition[i]:
+    #         label_counts[train_dataset.targets[idx]] += 1
+    #     label_percentages = label_counts / len(train_partition[i]) * 100
+    #
+    #     # print(f"Client {i}: Label Percentages:")
+    #     # for label, percentage in enumerate(label_percentages):
+    #     #     print(f"Label {label}: {percentage:.2f}%")
+    #
+    # return train_loaders, test_loaders, client_data_sizes
 
 
 from typing import List, Tuple
@@ -180,7 +187,6 @@ def get_iid_cifar10(num_clients: int, batch_size: int) -> Tuple[List[DataLoader]
         np.random.shuffle(train_partitions[i])
         np.random.shuffle(test_partitions[i])
 
-
     for i in range(num_clients):
         # Create sub-datasets for each client using the selected indices.
         train_subset = torch.utils.data.Subset(train_dataset, train_partitions[i])
@@ -195,7 +201,6 @@ def get_iid_cifar10(num_clients: int, batch_size: int) -> Tuple[List[DataLoader]
         client_data_sizes.append(len(train_partitions[i]))
 
     return train_loaders, test_loaders, client_data_sizes
-
 
 
 #
@@ -301,10 +306,6 @@ def get_iid_cifar10(num_clients: int, batch_size: int) -> Tuple[List[DataLoader]
 #     return train_loaders, test_loaders, client_data_sizes
 
 
-
-
-
-
 #EMNIST-----------------------------------------------------------------------
 
 import torch
@@ -312,10 +313,8 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import numpy as np
 
-
-
-
 from collections import Counter
+
 
 def get_EMNIST(num_clients):
     transform = transforms.Compose([
@@ -361,10 +360,10 @@ def get_EMNIST(num_clients):
 
         client_data_sizes.append(len(train_data_indices_by_client[i]))
 
-        print("Client ", i+1, " size: ", client_data_sizes[i])
-        client_train_labels = [int(emnist_train.targets[train_data_indices_by_client[i][j]]) for j in range(len(train_data_indices_by_client[i]))]
+        print("Client ", i + 1, " size: ", client_data_sizes[i])
+        client_train_labels = [int(emnist_train.targets[train_data_indices_by_client[i][j]]) for j in
+                               range(len(train_data_indices_by_client[i]))]
         counter = Counter(client_train_labels)
-        print("Client ", i+1, " labels distribution: ", counter)
-
+        print("Client ", i + 1, " labels distribution: ", counter)
 
     return clients_train_loaders, clients_test_loaders, client_data_sizes

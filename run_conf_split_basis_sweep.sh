@@ -5,7 +5,7 @@ SAMPLE_RATE=0.02       # Sample and aggregate 10 clients each iteration
 #SAMPLE_RATE=0.03      # Sample and aggregate 15 clients each iteration
 #SAMPLE_RATE=0.04      # Sample and aggregate 20 clients each iteration
 #SAMPLE_RATE=0.06      # Sample and aggregate 30 clients each iteration
-EPOCHS=192              # number of federated iterations
+EPOCHS=96              # number of federated iterations
 DATASET="CIFAR10"
 DELTA=0.002           # 1/500
 
@@ -65,7 +65,7 @@ echo CLIPPING_BOUND_RESIDUAL "${CLIPPING_BOUND_RESIDUAL}"
 
 basis_size_list=(50)
 history_size_list=(2000)
-virtual_publics_list=(200 100)
+virtual_publics_list=(150 200)
 
 
 #=

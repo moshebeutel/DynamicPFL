@@ -75,9 +75,9 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=42, help="seed value")
 
     parser.add_argument("--gpu", type=int, default=0, help="gpu device ID")
-    parser.add_argument("--eval-every", type=int, default=10, help="eval every X selected epochs")
+    parser.add_argument("--eval-every", type=int, default=1, help="eval every X selected epochs")
     parser.add_argument("--log-every", type=int, default=10, help="log every X selected epochs")
-    parser.add_argument("--eval-after", type=int, default=50, help="eval only after X selected epochs")
+    parser.add_argument("--eval-after", type=int, default=0, help="eval only after X selected epochs")
 
     parser.add_argument('--wandb', type=bool, default=True)
 
