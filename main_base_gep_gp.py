@@ -185,8 +185,8 @@ class AugStackTransform(v2.Transform):
         super().__init__()
         assert 0 < multiplicity < 201, f'multiplicity {multiplicity} is out of range'
 
-        cutmix = v2.CutMix(num_classes=10)
-        mixup = v2.MixUp(num_classes=10)
+        cutmix = v2.CutMix(num_classes=64)
+        mixup = v2.MixUp(num_classes=64)
         cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
         self.multiple_augments = torch.nn.ModuleList([cutmix_or_mixup for i in range(multiplicity)])
         self._multiplicity = multiplicity
@@ -194,7 +194,7 @@ class AugStackTransform(v2.Transform):
     def forward(self, batch):
         batch = [aug(batch) for aug in self.multiple_augments]
         images = torch.cat([b[0] for b in batch], dim=0)
-        labels = torch.cat([b[1] for b in batch], dim=0).long()
+        labels = torch.cat([b[1] for b in batch], dim=0)
         return images, labels
 
 
@@ -367,13 +367,16 @@ def main():
         optimizer = optim.Adam(params=public_client_model.parameters(), lr=args.lr)
         loss_fn = nn.CrossEntropyLoss()
         loss_fn = extend(loss_fn)
-        num_pub_samples = 0
-        pub_data_list, public_label_list = [], []
+        # num_pub_samples = 0
+        # pub_data_list, public_label_list = [], []
         for k, (data, labels) in enumerate(public_clients_loader):
             data, labels = data.to(device), labels.to(device)
-            labels = (labels * 6.4).long()
-            pub_data_list.append(data)
-            public_label_list.append(labels)
+            labels = torch.randint_like(labels, high=64)
+
+            data,labels = augmenter((data, labels))
+
+            # pub_data_list.append(data)
+            # public_label_list.append(labels)
             # with torch.no_grad():
             #     data, labels = augmenter((data, labels))
 
