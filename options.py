@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=64, help="Batch size")
 
     # >>> ***GEP
-    parser.add_argument('--num_public_clients', type=int, default=10,
+    parser.add_argument('--num_public_clients', type=int, default=100,
                         help="Number of public clients for gradient embedding subspace compute")
     parser.add_argument('--virtual_publics', type=int, default=64,
                         help="Number of virtual public clients for gradient embedding subspace compute")
@@ -41,14 +41,14 @@ def parse_args():
                                                                      " span subspace")
     # <<< ***GEP
 
-    parser.add_argument('--user_sample_rate', type=float, default=10/512, help="Sample rate for user sampling")
-    parser.add_argument('--noise_multiplier', type=float, default=0.0,
+    parser.add_argument('--user_sample_rate', type=float, default=30/500, help="Sample rate for user sampling")
+    parser.add_argument('--noise_multiplier', type=float, default=1.005,
                         help="If not zero, use this factor instead of epsilon accountant ")
     parser.add_argument('--noise_multiplier_residual', type=float, default=0.0,
                         help="If not zero, use this factor instead of epsilon accountant for residual")
     parser.add_argument('--target_epsilon', type=float, default=1, help="Target privacy budget epsilon")
     parser.add_argument('--target_delta', type=float, default=1/512, help="Target privacy budget delta")
-    parser.add_argument('--clipping_bound', type=float, default=0.1, help="Gradient clipping bound")
+    parser.add_argument('--clipping_bound', type=float, default=0.001, help="Gradient clipping bound")
     parser.add_argument('--clipping_bound_residual', type=float, default=0.1, help="Residual clipping bound")
     parser.add_argument('--fisher_threshold', type=float, default=0.4, help="Fisher information threshold for parameter selection")
     parser.add_argument('--lambda_1', type=float, default=0.1, help="Lambda value for EWC regularization term")
@@ -72,7 +72,7 @@ def parse_args():
 
     parser.add_argument('--appendix', type=str, default='')
 
-    parser.add_argument("--seed", type=int, default=42, help="seed value")
+    parser.add_argument("--seed", type=int, default=44, help="seed value")
 
     parser.add_argument("--gpu", type=int, default=0, help="gpu device ID")
     parser.add_argument("--eval-every", type=int, default=1, help="eval every X selected epochs")

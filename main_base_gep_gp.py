@@ -72,6 +72,7 @@ clipping_bound = args.clipping_bound
 clipping_bound_residual = args.clipping_bound_residual
 dataset = args.dataset
 user_sample_rate = args.user_sample_rate
+embed_dim = args.embed_dim
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if device == torch.device('cuda'):
     current_device = torch.cuda.current_device()
@@ -185,8 +186,8 @@ class AugStackTransform(v2.Transform):
         super().__init__()
         assert 0 < multiplicity < 201, f'multiplicity {multiplicity} is out of range'
 
-        cutmix = v2.CutMix(num_classes=64)
-        mixup = v2.MixUp(num_classes=64)
+        cutmix = v2.CutMix(num_classes=embed_dim)
+        mixup = v2.MixUp(num_classes=embed_dim)
         cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
         self.multiple_augments = torch.nn.ModuleList([cutmix_or_mixup for i in range(multiplicity)])
         self._multiplicity = multiplicity
@@ -371,7 +372,7 @@ def main():
         # pub_data_list, public_label_list = [], []
         for k, (data, labels) in enumerate(public_clients_loader):
             data, labels = data.to(device), labels.to(device)
-            labels = torch.randint_like(labels, high=64)
+            labels = torch.randint_like(labels, high=embed_dim)
 
             data,labels = augmenter((data, labels))
 
@@ -527,8 +528,8 @@ def main():
         num_splits = num_virtual_public_clients
 
         # Calculate the number of splits
-        # rows_per_split = int(public_grads_flat.size(0)) // num_splits
-        rows_per_split = 1
+        rows_per_split = int(public_grads_flat.size(0)) // num_splits
+        # rows_per_split = 1
 
         # Reshape the tensor to (num_splits, rows_per_split, n) and calculate the mean along the rows
         public_virtual_grads = public_grads_flat[:num_splits * rows_per_split].reshape(num_splits, rows_per_split,

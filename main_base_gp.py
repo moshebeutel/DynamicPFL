@@ -137,7 +137,7 @@ def main():
         clients_train_loaders, clients_test_loaders, client_data_sizes = get_CIFAR10(args.dir_alpha, num_clients, args.batch_size)
         clients_models = [cifar10NetGPkernel() for _ in range(num_clients)]
         global_model = cifar10NetGPkernel()
-        classes_per_client = 10
+        classes_per_client = 2
     # elif dataset == 'FEMNIST':
     #     clients_train_loaders, clients_test_loaders, client_data_sizes = get_FEMNIST(num_clients)
     #     clients_models = [femnistNet() for _ in range(num_clients)]
@@ -161,7 +161,9 @@ def main():
     noise_multiplier = 0
     if not args.no_noise:
         noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size,
-                                                    client_data_sizes)
+                                                    client_data_sizes) \
+            if args.noise_multiplier == 0 \
+            else args.noise_multiplier
         # noise_multiplier = 3.029
     print('noise multiplier', noise_multiplier)
     assert classes_per_client > 0, f'classes per client not defined'

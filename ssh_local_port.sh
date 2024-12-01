@@ -3,12 +3,20 @@
 
 if [ -z "$1" ]; then
   echo "No argument provided! Map to dsief08"
-  DSIEF=8
+  dsi_num=8
+else
+  dsi_num="$1"
 fi
 
-# Store the argument in a variable
-DSIEF="$1"
+if [ "$dsi_num" -lt 10 ]; then
+  dsi_num="0${dsi_num}"
+fi
 
-echo "Map port 600${DSIEF} to dsief0${DSIEF}:22"
+port_num="60${dsi_num}"
+dsi_name="dsief${dsi_num}"
 
-ssh -L "600${DSIEF}:dsief0${DSIEF}:22" beutelm@dsihead.lnx.biu.ac.il
+echo "Map port ${port_num} to ${dsi_name}:22"
+
+echo "DO NOT FORGET VPN!"
+
+ssh -L "${port_num}:${dsi_name}:22" beutelm@dsihead.lnx.biu.ac.il
