@@ -15,7 +15,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from torchvision.transforms import v2
 from tqdm.auto import trange
 import wandb
-from data import get_mnist_datasets, get_clients_datasets, get_CIFAR10, get_SVHN
+from data_load.data import get_mnist_datasets, get_clients_datasets, get_CIFAR10, get_SVHN
 from data_load.emg_utils import get_dataloaders
 # >>>  ***GEP
 from gep_torch_utils import (compute_subspace, embed_grad, flatten_tensor,
@@ -61,6 +61,7 @@ gradient_history_size = args.history_size
 local_epoch = args.local_epoch
 global_epoch = args.global_epoch
 batch_size = args.batch_size
+global_lr = args.global_lr
 pub_batch_size = 64
 target_epsilon = args.target_epsilon
 target_delta = args.target_delta
@@ -972,8 +973,8 @@ def main():
         aggregated_residuals = aggregated_residuals.cpu()
         for n, p in prev_params.items():
             new_params[n] = (p +
-                             aggregated_update[offset: offset + p.numel()].reshape(p.shape) +
-                             aggregated_residuals[offset: offset + p.numel()].reshape(p.shape))
+                             global_lr * (aggregated_update[offset: offset + p.numel()].reshape(p.shape) +
+                             aggregated_residuals[offset: offset + p.numel()].reshape(p.shape)))
             offset += p.numel()
         # update new parameters of global net
         global_model.load_state_dict(new_params)

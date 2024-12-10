@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Tuple, List
 from torch.utils.data import DataLoader
 from torch.utils.data import DataLoader, Subset, SubsetRandomSampler
@@ -82,7 +83,8 @@ def get_CIFAR10(alpha: float, num_clients: int, batch_size: int) -> Tuple[
     List[DataLoader], List[DataLoader], List[int]]:
 
 
-    dataloaders = gen_random_loaders(data_name='cifar10', data_path='/home/user1/GIT/DynamicPFL_gp/data/CIFAR10', num_users=num_clients, bz=batch_size, classes_per_user=2)
+    dataloaders = gen_random_loaders(data_name='cifar10', data_path=f'{Path.home()}/GIT/DynamicPFL_gp/data/CIFAR10',
+                                     num_users=num_clients, bz=batch_size, classes_per_user=2)
     train_data_sizes = [len(loader) * batch_size for loader in dataloaders[0]]
     return dataloaders[0], dataloaders[1], train_data_sizes
 
