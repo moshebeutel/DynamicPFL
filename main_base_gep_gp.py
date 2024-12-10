@@ -1,4 +1,3 @@
-import copy
 import gc
 import os
 import random
@@ -12,12 +11,12 @@ import torch.optim as optim
 from backpack import backpack, extend
 from backpack.extensions import BatchGrad
 from torch import Tensor, nn
-from torch.utils.data import TensorDataset, DataLoader, default_collate
+from torch.utils.data import TensorDataset, DataLoader
 from torchvision.transforms import v2
 from tqdm.auto import trange
 import wandb
 from data import get_mnist_datasets, get_clients_datasets, get_CIFAR10, get_SVHN
-from emg_utils import get_dataloaders
+from data_load.emg_utils import get_dataloaders
 # >>>  ***GEP
 from gep_torch_utils import (compute_subspace, embed_grad, flatten_tensor,
                              project_back_embedding, add_new_gradients_to_history)
@@ -27,9 +26,6 @@ from utils import compute_noise_multiplier
 # <<< ***GEP
 from pFedGP.pFedGP.Learner import pFedGPFullLearner
 from gp_utils import build_tree
-
-from torch.func import functional_call, vmap, grad
-
 
 
 def norm_of_rows_squared(t: torch.Tensor) -> torch.Tensor:

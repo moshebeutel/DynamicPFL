@@ -1,0 +1,27 @@
+method: grid
+metric:
+  goal: maximize
+  name: Best Accuracy
+parameters:
+  basis_size:
+    values:
+      - 50
+      - 200
+  global_lr:
+    values:
+      - 0.001
+      - 0.0001
+  local_epoch:
+    values:
+      - 1
+      - 5
+  num_public_clients:
+    values:
+      - 10
+      - 100
+      - 200
+  virtual_publics:
+    values:
+      - 200
+      - 400
+program: main_base_gep_gp.py

@@ -3,9 +3,11 @@ import random
 import sys
 import torch.optim as optim
 import wandb
+from torch.utils.data import DataLoader
 from tqdm.auto import trange
-from data import *
-from emg_utils import get_dataloaders
+
+from data_load.data import get_clients_datasets, get_mnist_datasets, get_CIFAR10, get_SVHN
+from data_load.emg_utils import get_dataloaders
 from gp_utils import build_tree
 from net import *
 from options import parse_args

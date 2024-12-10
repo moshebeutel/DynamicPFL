@@ -5,8 +5,7 @@ import sys
 import torch.optim as optim
 import wandb
 from tqdm.auto import trange
-from data import *
-from emg_utils import get_dataloaders
+from data_load.emg_utils import get_dataloaders
 # >>>  ***GEP
 from gep_utils import (compute_subspace, embed_grad, flatten_tensor,
                        project_back_embedding, add_new_gradients_to_history)

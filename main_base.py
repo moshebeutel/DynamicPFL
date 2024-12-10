@@ -4,8 +4,7 @@ import sys
 import torch.optim as optim
 import wandb
 from tqdm.auto import trange
-from data import *
-from emg_utils import get_dataloaders
+from data_load.emg_utils import get_dataloaders
 from net import *
 from options import parse_args
 from utils import compute_noise_multiplier

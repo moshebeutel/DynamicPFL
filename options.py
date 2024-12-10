@@ -28,7 +28,7 @@ def parse_args():
 
     parser.add_argument('--num_clients', type=int, default=500, help="Number of clients")
     parser.add_argument('--local_epoch', type=int, default=5, help="Number of local epochs")
-    parser.add_argument('--global_epoch', type=int, default=960, help="Number of global epochs")
+    parser.add_argument('--global_epoch', type=int, default=100, help="Number of global epochs")
     parser.add_argument('--batch_size', type=int, default=64, help="Batch size")
 
     # >>> ***GEP
@@ -41,14 +41,14 @@ def parse_args():
                                                                      " span subspace")
     # <<< ***GEP
 
-    parser.add_argument('--user_sample_rate', type=float, default=30/500, help="Sample rate for user sampling")
+    parser.add_argument('--user_sample_rate', type=float, default=50/500, help="Sample rate for user sampling")
     parser.add_argument('--noise_multiplier', type=float, default=1.005,
                         help="If not zero, use this factor instead of epsilon accountant ")
     parser.add_argument('--noise_multiplier_residual', type=float, default=0.0,
                         help="If not zero, use this factor instead of epsilon accountant for residual")
     parser.add_argument('--target_epsilon', type=float, default=1, help="Target privacy budget epsilon")
     parser.add_argument('--target_delta', type=float, default=1/512, help="Target privacy budget delta")
-    parser.add_argument('--clipping_bound', type=float, default=0.001, help="Gradient clipping bound")
+    parser.add_argument('--clipping_bound', type=float, default=0.01, help="Gradient clipping bound")
     parser.add_argument('--clipping_bound_residual', type=float, default=0.1, help="Residual clipping bound")
     parser.add_argument('--fisher_threshold', type=float, default=0.4, help="Fisher information threshold for parameter selection")
     parser.add_argument('--lambda_1', type=float, default=0.1, help="Lambda value for EWC regularization term")
@@ -57,7 +57,7 @@ def parse_args():
     parser.add_argument('--device', type=int, default=0, help='Set the visible CUDA device for calculations')
 
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
-    parser.add_argument('--global-lr', type=float, default=0.5, help="learning rate at server")
+    parser.add_argument('--global-lr', type=float, default=1e-3, help="learning rate at server")
 
     parser.add_argument('--no_clip', action='store_true')
     parser.add_argument('--no_noise', action='store_true')

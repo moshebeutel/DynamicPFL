@@ -4,8 +4,7 @@ import sys
 import torch.optim as optim
 from tqdm import tqdm
 from tqdm.auto import trange
-from data import *
-from emg_utils import get_dataloaders
+from data_load.emg_utils import get_dataloaders
 # >>>  ***GEP
 from gep_utils import (embed_grad, flatten_tensor,
                        project_back_embedding)

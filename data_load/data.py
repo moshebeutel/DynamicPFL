@@ -2,7 +2,7 @@ from typing import Tuple, List
 from torch.utils.data import DataLoader
 from torch.utils.data import DataLoader, Subset, SubsetRandomSampler
 
-from partitioned_data_loader import gen_random_loaders
+from data_load.partitioned_data_loader import gen_random_loaders
 
 
 #SVHN------------------------------------------------------------
@@ -82,7 +82,7 @@ def get_CIFAR10(alpha: float, num_clients: int, batch_size: int) -> Tuple[
     List[DataLoader], List[DataLoader], List[int]]:
 
 
-    dataloaders = gen_random_loaders(data_name='cifar10', data_path='./data/CIFAR10', num_users=num_clients, bz=batch_size, classes_per_user=2)
+    dataloaders = gen_random_loaders(data_name='cifar10', data_path='/home/user1/GIT/DynamicPFL_gp/data/CIFAR10', num_users=num_clients, bz=batch_size, classes_per_user=2)
     train_data_sizes = [len(loader) * batch_size for loader in dataloaders[0]]
     return dataloaders[0], dataloaders[1], train_data_sizes
 
@@ -322,8 +322,8 @@ def get_EMNIST(num_clients):
         transforms.Normalize((0.1307,), (0.3081,))
     ])
 
-    emnist_train = datasets.EMNIST('./data', split='byclass', train=True, download=True, transform=transform)
-    emnist_test = datasets.EMNIST('./data', split='byclass', train=False, download=True, transform=transform)
+    emnist_train = datasets.EMNIST('../data', split='byclass', train=True, download=True, transform=transform)
+    emnist_test = datasets.EMNIST('../data', split='byclass', train=False, download=True, transform=transform)
 
     client_data_sizes = []
     clients_train_loaders = []
