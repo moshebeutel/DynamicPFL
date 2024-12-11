@@ -6,7 +6,7 @@ N_CLIENTS=500
 #SAMPLE_RATE=0.04      # Sample and aggregate 20 clients each iteration
 #SAMPLE_RATE=0.06      # Sample and aggregate 30 clients each iteration
 SAMPLE_RATE=0.1        # Sample and aggregate 50 clients each iteration
-EPOCHS=100              # number of federated iterations
+EPOCHS=50              # number of federated iterations
 DATASET="CIFAR10"
 DELTA=0.002            # 1/500
 
@@ -29,8 +29,8 @@ echo GPU "$GPU" SEED "$SEED" LOCAL_EPOCHS "${LOCAL_EPOCHS}"
 
 
 EVAL_AFTER=10
-EVAL_EVERY=10
-LOG_EVERY=10
+EVAL_EVERY=5
+LOG_EVERY=5
 #BASIS_SIZE=400
 #PUBLIC_CLIENTS=50                    # clients used for subspace compute
 #VIRTUAL_PUBLICS=400
@@ -62,13 +62,13 @@ echo CLIPPING_BOUND "${CLIPPING_BOUND}"
 echo CLIPPING_BOUND_RESIDUAL "${CLIPPING_BOUND_RESIDUAL}"
 
 
-global_lr_list=(0.001)
-lr_list=(0.001 0.01)
+global_lr_list=(0.5 0.001)
+lr_list=(0.001 0.0001)
 clipping_bound_list=(0.01 0.1)
 clipping_bound_residual_list=(0.1)
-public_clients_list=(10 100)
-basis_size_list=(10)
-history_size_list=(1000)
+public_clients_list=(10 100 200)
+basis_size_list=(100)
+history_size_list=(2000)
 virtual_publics_list=(200)
 local_epoch_list=(5)
 
