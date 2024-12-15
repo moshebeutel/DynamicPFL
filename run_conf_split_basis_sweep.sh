@@ -6,7 +6,7 @@ N_CLIENTS=500
 #SAMPLE_RATE=0.04      # Sample and aggregate 20 clients each iteration
 #SAMPLE_RATE=0.06      # Sample and aggregate 30 clients each iteration
 SAMPLE_RATE=0.1        # Sample and aggregate 50 clients each iteration
-EPOCHS=50              # number of federated iterations
+EPOCHS=99              # number of federated iterations
 DATASET="CIFAR10"
 DELTA=0.002            # 1/500
 
@@ -62,14 +62,15 @@ echo CLIPPING_BOUND "${CLIPPING_BOUND}"
 echo CLIPPING_BOUND_RESIDUAL "${CLIPPING_BOUND_RESIDUAL}"
 
 
-global_lr_list=(0.5 0.001)
-lr_list=(0.001 0.0001)
-clipping_bound_list=(0.01 0.1)
+global_lr_list=(0.9)
+lr_list=(0.0001)
+clipping_bound_list=(0.01)
 clipping_bound_residual_list=(0.1)
 public_clients_list=(10 100 200)
+#public_clients_list=(10)
 basis_size_list=(100)
 history_size_list=(2000)
-virtual_publics_list=(200)
+virtual_publics_list=(200 400)
 local_epoch_list=(5)
 
 #global_lr_list=(0.5 0.001)
@@ -113,7 +114,7 @@ for global_lr in "${global_lr_list[@]}"; do
                   echo  GEP_ARGUMENTS  "${GEP_ARGUMENTS[@]}"
 
 
-                  EXP_NAME=glr_"${GLOBAL_LR}"_virt_"${VIRTUAL_PUBLICS}"_basis_"${BASIS_SIZE}"_history_"${HISTORY_SIZE}"_mul_"${NOISE_MULTIPLIER_GRAD}"_"${NOISE_MULTIPLIER_RESIDUAL}"_clip_"${CLIPPING_BOUND}"_"${CLIPPING_BOUND_RESIDUAL}"_seed_"${SEED}"_ep_"${EPOCHS}"_loc_ep_"${LOCAL_EPOCHS}"
+                  EXP_NAME=glr_"${GLOBAL_LR}"_lr_"${LR}"_pub_"${PUBLIC_CLIENTS}"_virt_"${VIRTUAL_PUBLICS}"_basis_"${BASIS_SIZE}"_history_"${HISTORY_SIZE}"_mul_"${NOISE_MULTIPLIER_GRAD}"_"${NOISE_MULTIPLIER_RESIDUAL}"_clip_"${CLIPPING_BOUND}"_"${CLIPPING_BOUND_RESIDUAL}"_seed_"${SEED}"_ep_"${EPOCHS}"_loc_ep_"${LOCAL_EPOCHS}"
                   EXP_NAME=GEP_RES_"${EXP_NAME}"
 
                   LOG_FOLDER="logs/${DATASET}_${EXP_NAME}"

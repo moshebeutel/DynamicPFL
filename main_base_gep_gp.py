@@ -197,6 +197,7 @@ class AugStackTransform(v2.Transform):
 
 
 def main():
+    global global_lr
     best_acc = 0.0
     mean_acc_s = []
     acc_matrix = []
@@ -271,14 +272,15 @@ def main():
 
     noise_multiplier = 0
     noise_multiplier_residual = 0
-
-    noise_multiplier = 0
     if not args.no_noise:
         noise_multiplier = compute_noise_multiplier(target_epsilon, target_delta, global_epoch, local_epoch, batch_size,
                                                     client_data_sizes) if args.noise_multiplier == 0 else args.noise_multiplier
         # >>> *** GEP
         noise_multiplier_residual = noise_multiplier if args.noise_multiplier_residual == 0 else args.noise_multiplier_residual
         # <<< *** GEP
+
+    print(f'noise multiplier: {noise_multiplier}')
+    print(f'noise multiplier residual: {noise_multiplier_residual}')
 
     GPs = torch.nn.ModuleList([])
     for client_id in range(num_clients):
@@ -335,9 +337,15 @@ def main():
 
     # <<< ***GEP
     pbar = trange(global_epoch)
+    num_big_epochs = 0
     for epoch in pbar:
         to_eval = ((epoch + 1) > args.eval_after and (epoch + 1) % args.eval_every == 0) or (epoch + 1) == global_epoch
         # >>>  ***GEP
+
+        new_num_big_epochs = int(user_sample_rate * epoch)
+        if new_num_big_epochs > num_big_epochs:
+            num_big_epochs = new_num_big_epochs
+            global_lr *= 0.8
 
         # get public clients gradients for current global model state
         public_clients_model_updates = {}
